@@ -1,11 +1,18 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { BookingCalendar } from '@/components/BookingCalendar';
 
 const Index = () => {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold mb-4">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
+    <div className="min-h-screen bg-gradient-to-br from-background to-secondary/20">
+      <div className="container mx-auto p-6">
+        <div className="mb-8">
+          <h1 className="text-4xl font-bold bg-gradient-primary bg-clip-text text-transparent mb-2">
+            Property Booking Manager
+          </h1>
+          <p className="text-lg text-muted-foreground">
+            Manage your property bookings with HostexAPI integration
+          </p>
+        </div>
+        <BookingCalendar />
       </div>
     </div>
   );

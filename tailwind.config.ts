@@ -26,7 +26,8 @@ export default {
 				foreground: 'hsl(var(--foreground))',
 				primary: {
 					DEFAULT: 'hsl(var(--primary))',
-					foreground: 'hsl(var(--primary-foreground))'
+					foreground: 'hsl(var(--primary-foreground))',
+					glow: 'hsl(var(--primary-glow))'
 				},
 				secondary: {
 					DEFAULT: 'hsl(var(--secondary))',
@@ -52,6 +53,13 @@ export default {
 					DEFAULT: 'hsl(var(--card))',
 					foreground: 'hsl(var(--card-foreground))'
 				},
+				booking: {
+					confirmed: 'hsl(var(--booking-confirmed))',
+					pending: 'hsl(var(--booking-pending))',
+					cancelled: 'hsl(var(--booking-cancelled))'
+				},
+				cleaning: 'hsl(var(--cleaning-required))',
+				overlap: 'hsl(var(--overlap-warning))',
 				sidebar: {
 					DEFAULT: 'hsl(var(--sidebar-background))',
 					foreground: 'hsl(var(--sidebar-foreground))',
@@ -62,6 +70,16 @@ export default {
 					border: 'hsl(var(--sidebar-border))',
 					ring: 'hsl(var(--sidebar-ring))'
 				}
+			},
+			backgroundImage: {
+				'gradient-primary': 'var(--gradient-primary)',
+				'gradient-card': 'var(--gradient-card)',
+				'gradient-booking': 'var(--gradient-booking)'
+			},
+			boxShadow: {
+				'booking': 'var(--shadow-booking)',
+				'card-custom': 'var(--shadow-card)',
+				'hover': 'var(--shadow-hover)'
 			},
 			borderRadius: {
 				lg: 'var(--radius)',
