@@ -19,22 +19,27 @@ export const useBookings = () => {
       const data = await response.json();
       console.log('API Response:', data);
       
+      // Check if data has reservations array
+      if (!data.reservations || !Array.isArray(data.reservations)) {
+        throw new Error('Invalid API response format: missing reservations array');
+      }
+      
       // Transform the API data to our Booking interface
-      const transformedBookings: Booking[] = data.map((booking: any) => ({
-        id: booking.id || Math.random().toString(36).substr(2, 9),
-        guestName: booking.guestName || booking.guest_name || 'Unknown Guest',
-        checkIn: booking.checkIn || booking.check_in,
-        checkOut: booking.checkOut || booking.check_out,
-        guests: booking.guests || booking.guest_count || 1,
-        source: booking.source || booking.booking_source || 'Direct',
-        status: booking.status || 'confirmed',
-        cleaningRequired: booking.cleaningRequired || booking.cleaning_required || true,
-        cleaningStatus: booking.cleaningStatus || booking.cleaning_status || 'pending',
-        price: booking.price || booking.total_price,
-        currency: booking.currency || 'USD',
-        phone: booking.phone || booking.guest_phone,
-        email: booking.email || booking.guest_email,
-        notes: booking.notes || booking.special_requests
+      const transformedBookings: Booking[] = data.reservations.map((reservation: any) => ({
+        id: reservation.reservation_code || Math.random().toString(36).substr(2, 9),
+        guestName: reservation.guest_name || 'Unknown Guest',
+        checkIn: reservation.check_in_date,
+        checkOut: reservation.check_out_date,
+        guests: reservation.number_of_guests || 1,
+        source: reservation.custom_channel?.name || reservation.channel_type || 'Direct',
+        status: reservation.status === 'accepted' ? 'confirmed' : reservation.status,
+        cleaningRequired: true, // Assume cleaning is always required for property bookings
+        cleaningStatus: 'pending',
+        price: reservation.rates?.rate?.amount,
+        currency: reservation.rates?.rate?.currency || 'JPY',
+        phone: reservation.guest_phone,
+        email: reservation.guest_email,
+        notes: reservation.remarks || reservation.channel_remarks
       }));
       
       setBookings(transformedBookings);
