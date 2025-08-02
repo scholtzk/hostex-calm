@@ -75,7 +75,7 @@ export const BookingBar = ({
 
   const gridColumnStart = startDay + 1;
   const gridColumnEnd = gridColumnStart + spanDays;
-  const topOffset = 30 + (stackLevel * 35); // Stack overlapping bookings
+  const topOffset = 30 + (stackLevel * 40); // Increased gap between stacked bookings
 
   return (
     <div
@@ -89,8 +89,8 @@ export const BookingBar = ({
         gridColumn: `${gridColumnStart} / ${gridColumnEnd}`,
         top: `${topOffset}px`,
         height: '28px',
-        marginLeft: '50%', // Start in second half of first day
-        marginRight: '50%', // End in first half of last day
+        left: '25%', // Start in second half of first day
+        right: '25%', // End in first half of last day
         clipPath: 'polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%)', // Slanted edges
       }}
     >

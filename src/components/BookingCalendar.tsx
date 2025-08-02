@@ -51,9 +51,13 @@ export const BookingCalendar = () => {
 
     // Process bookings into spans
     const spans: BookingSpan[] = [];
-    const occupiedSlots: Record<string, number[]> = {}; // Track occupied stack levels per week
+    const processedBookings = new Set<string>(); // Track processed bookings to avoid duplicates
 
     bookings.forEach(booking => {
+      // Skip if already processed (avoid duplicates)
+      if (processedBookings.has(booking.id)) return;
+      processedBookings.add(booking.id);
+
       const checkIn = new Date(booking.checkIn);
       const checkOut = new Date(booking.checkOut);
       
@@ -71,6 +75,7 @@ export const BookingCalendar = () => {
       
       // Handle bookings that span multiple weeks
       let currentStart = startDayIndex;
+      let segmentIndex = 0;
       
       while (currentStart <= actualEndIndex) {
         const startWeek = Math.floor(currentStart / 7);
@@ -79,28 +84,27 @@ export const BookingCalendar = () => {
         const segmentEnd = Math.min(actualEndIndex, weekEnd);
         const spanDays = segmentEnd - currentStart + 1;
 
-        // Check for overlaps and find available stack level
-        const weekKey = `week-${startWeek}`;
-        if (!occupiedSlots[weekKey]) {
-          occupiedSlots[weekKey] = [];
-        }
-
-        // Find the lowest available stack level
+        // Find stack level by checking for overlaps with existing spans in this week
         let stackLevel = 0;
-        const segmentDays = Array.from({length: spanDays}, (_, i) => startDay + i);
+        const existingSpansInWeek = spans.filter(s => s.startWeek === startWeek);
         
+        // Check each stack level until we find a free one
         while (true) {
-          const hasConflict = segmentDays.some(day => 
-            occupiedSlots[weekKey].includes(stackLevel * 7 + day)
-          );
+          const hasConflict = existingSpansInWeek.some(existingSpan => {
+            if (existingSpan.stackLevel !== stackLevel) return false;
+            
+            const existingStart = existingSpan.startDay;
+            const existingEnd = existingSpan.startDay + existingSpan.spanDays - 1;
+            const newStart = startDay;
+            const newEnd = startDay + spanDays - 1;
+            
+            // Check for overlap
+            return !(newEnd < existingStart || newStart > existingEnd);
+          });
+          
           if (!hasConflict) break;
           stackLevel++;
         }
-
-        // Mark this slot as occupied
-        segmentDays.forEach(day => {
-          occupiedSlots[weekKey].push(stackLevel * 7 + day);
-        });
 
         // Check for same-day checkout/checkin overlaps
         const hasOverlap = bookings.some(otherBooking => {
@@ -121,6 +125,7 @@ export const BookingCalendar = () => {
         });
 
         currentStart = weekEnd + 1;
+        segmentIndex++;
       }
     });
 
