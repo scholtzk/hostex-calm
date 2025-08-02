@@ -35,23 +35,21 @@ export const BookingBar = ({
     }
   };
 
-  const getSourceColor = (source: string) => {
-    const colors: Record<string, string> = {
-      'Airbnb': 'bg-rose-500',
-      'Booking.com': 'bg-blue-500',
-      'VRBO': 'bg-yellow-500',
-      'Direct': 'bg-green-500',
-    };
-    return colors[source] || 'bg-gray-500';
-  };
-
   const getBookingColors = (status: string, source: string) => {
+    // Source-based colors using design system
     if (source === 'Airbnb') {
-      return 'bg-rose-500 border-rose-500 text-white';
+      return 'bg-[hsl(348_76%_60%)] border-[hsl(348_76%_60%)] text-white';
     }
     if (source === 'Booking.com') {
-      return 'bg-blue-500 border-blue-500 text-white';
+      return 'bg-[hsl(213_78%_56%)] border-[hsl(213_78%_56%)] text-white';
     }
+    if (source === 'VRBO') {
+      return 'bg-[hsl(45_90%_60%)] border-[hsl(45_90%_60%)] text-white';
+    }
+    if (source === 'Direct') {
+      return 'bg-booking-confirmed border-booking-confirmed text-white';
+    }
+    
     // Fallback to status colors for other sources
     switch (status) {
       case 'confirmed':
@@ -63,6 +61,16 @@ export const BookingBar = ({
       default:
         return 'bg-secondary border-border text-secondary-foreground';
     }
+  };
+
+  const getSourceIndicatorColor = (source: string) => {
+    const colors: Record<string, string> = {
+      'Airbnb': 'bg-[hsl(348_76%_60%)]',
+      'Booking.com': 'bg-[hsl(213_78%_56%)]',
+      'VRBO': 'bg-[hsl(45_90%_60%)]',
+      'Direct': 'bg-booking-confirmed',
+    };
+    return colors[source] || 'bg-muted';
   };
 
   const gridColumnStart = startDay + 1;
@@ -88,7 +96,7 @@ export const BookingBar = ({
     >
       <div className="flex items-center justify-between h-full text-xs">
         <div className="flex items-center gap-1 min-w-0 flex-1">
-          <div className={cn("w-2 h-2 rounded-full flex-shrink-0", getSourceColor(booking.source))} />
+          <div className={cn("w-2 h-2 rounded-full flex-shrink-0", getSourceIndicatorColor(booking.source))} />
           <span className="font-medium truncate">{booking.guestName}</span>
           {hasOverlap && <AlertCircle className="w-3 h-3 flex-shrink-0" />}
         </div>
