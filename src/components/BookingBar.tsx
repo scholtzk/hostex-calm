@@ -37,12 +37,32 @@ export const BookingBar = ({
 
   const getSourceColor = (source: string) => {
     const colors: Record<string, string> = {
-      'Airbnb': 'bg-red-500',
+      'Airbnb': 'bg-rose-500',
       'Booking.com': 'bg-blue-500',
       'VRBO': 'bg-yellow-500',
       'Direct': 'bg-green-500',
     };
     return colors[source] || 'bg-gray-500';
+  };
+
+  const getBookingColors = (status: string, source: string) => {
+    if (source === 'Airbnb') {
+      return 'bg-rose-500 border-rose-500 text-white';
+    }
+    if (source === 'Booking.com') {
+      return 'bg-blue-500 border-blue-500 text-white';
+    }
+    // Fallback to status colors for other sources
+    switch (status) {
+      case 'confirmed':
+        return 'bg-booking-confirmed border-booking-confirmed text-white';
+      case 'pending':
+        return 'bg-booking-pending border-booking-pending text-white';
+      case 'cancelled':
+        return 'bg-booking-cancelled border-booking-cancelled text-white';
+      default:
+        return 'bg-secondary border-border text-secondary-foreground';
+    }
   };
 
   const gridColumnStart = startDay + 1;
@@ -52,18 +72,18 @@ export const BookingBar = ({
   return (
     <div
       className={cn(
-        "absolute z-10 rounded-md shadow-booking transition-all duration-200 hover:shadow-hover hover:z-20",
-        "border-l-4 px-2 py-1 cursor-pointer",
-        hasOverlap ? "border-l-overlap" : `border-l-booking-${booking.status}`,
-        getStatusColor(booking.status),
+        "absolute z-10 shadow-booking transition-all duration-200 hover:shadow-hover hover:z-20",
+        "px-2 py-1 cursor-pointer",
+        getBookingColors(booking.status, booking.source),
         className
       )}
       style={{
         gridColumn: `${gridColumnStart} / ${gridColumnEnd}`,
         top: `${topOffset}px`,
         height: '28px',
-        left: '2px',
-        right: '2px',
+        left: '50%', // Start in second half of first day
+        right: '50%', // End in first half of last day
+        clipPath: 'polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%)', // Slanted edges
       }}
     >
       <div className="flex items-center justify-between h-full text-xs">
