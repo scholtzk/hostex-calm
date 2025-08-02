@@ -89,8 +89,8 @@ export const BookingBar = ({
         gridColumn: `${gridColumnStart} / ${gridColumnEnd}`,
         top: `${topOffset}px`,
         height: '28px',
-        left: '25%', // Start in second half of first day
-        right: '25%', // End in first half of last day
+        marginLeft: '60%', // Start at 60% of first day (past halfway)
+        marginRight: '60%', // End at 40% of last day (before halfway)
         clipPath: 'polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%)', // Slanted edges
       }}
     >
