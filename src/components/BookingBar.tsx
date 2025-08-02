@@ -73,9 +73,11 @@ export const BookingBar = ({
     return colors[source] || 'bg-muted';
   };
 
-  const gridColumnStart = startDay + 1;
-  const gridColumnEnd = gridColumnStart + spanDays;
   const topOffset = 30 + (stackLevel * 40); // Increased gap between stacked bookings
+  
+  // Calculate positioning: start at 60% of first day, end at 40% of last day
+  const leftOffset = `calc(${startDay} * (100% / 7) + (100% / 7) * 0.6)`;
+  const rightOffset = `calc(${7 - (startDay + spanDays)} * (100% / 7) + (100% / 7) * 0.6)`;
 
   return (
     <div
@@ -86,11 +88,10 @@ export const BookingBar = ({
         className
       )}
       style={{
-        gridColumn: `${gridColumnStart} / ${gridColumnEnd}`,
         top: `${topOffset}px`,
         height: '28px',
-        marginLeft: '60%', // Start at 60% of first day (past halfway)
-        marginRight: '60%', // End at 40% of last day (before halfway)
+        left: leftOffset,
+        right: rightOffset,
         clipPath: 'polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%)', // Slanted edges
       }}
     >
