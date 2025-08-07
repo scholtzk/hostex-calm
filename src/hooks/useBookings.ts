@@ -9,8 +9,9 @@ export const useBookings = () => {
   const loadBookings = async () => {
     try {
       setLoading(true);
-      console.log('Loading bookings from Firebase Cloud Function...');
-      const response = await fetch('https://us-central1-property-manager-cf570.cloudfunctions.net/bookings');
+      console.log('Loading bookings from local development server...');
+      // Updated to use local development server instead of non-existent Cloud Function
+      const response = await fetch('http://localhost:5001/bookings');
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
