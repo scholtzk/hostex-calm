@@ -15,7 +15,9 @@ const corsHandler = cors({ origin: '*', methods: ['POST', 'OPTIONS'], allowedHea
 // Helper to build full calendar URL at runtime (hash-based for GitHub Pages compatibility)
 const buildCalendarLink = (uniqueLink: string) => {
   const base = process.env.FRONTEND_BASE_URL || 'https://property-manager-cf570.web.app';
-  return `${base}/#/availability/${uniqueLink}`;
+  const basePath = process.env.FRONTEND_BASE_PATH || '';
+  const trimmed = basePath.endsWith('/') ? basePath.slice(0, -1) : basePath;
+  return `${base}${trimmed}#/availability/${uniqueLink}`;
 };
 
 // LINE API Configuration - Use environment variables instead of functions.config()

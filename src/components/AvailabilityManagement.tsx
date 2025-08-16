@@ -127,7 +127,8 @@ export const AvailabilityManagement: React.FC = () => {
   // Copy link to clipboard
   const copyLink = async (uniqueLink: string) => {
     const baseUrl = window.location.origin;
-    const fullLink = `${baseUrl}/#/availability/${uniqueLink}`;
+    const basePath = (import.meta as any).env.BASE_URL?.replace(/\/$/, '') || '';
+    const fullLink = `${baseUrl}${basePath}#/availability/${uniqueLink}`;
     
     try {
       await navigator.clipboard.writeText(fullLink);
@@ -156,7 +157,8 @@ export const AvailabilityManagement: React.FC = () => {
     }
     const baseUrl = window.location.origin;
     const token = buildStableToken(cleanerId, month);
-    const fullLink = `${baseUrl}/#/availability/${token}`;
+    const basePath = (import.meta as any).env.BASE_URL?.replace(/\/$/, '') || '';
+    const fullLink = `${baseUrl}${basePath}#/availability/${token}`;
     try {
       await navigator.clipboard.writeText(fullLink);
       toast({ title: 'Stable link copied', description: 'You can reuse this link anytime.' });
