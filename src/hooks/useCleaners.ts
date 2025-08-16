@@ -21,7 +21,8 @@ export const useCleaners = () => {
       }
       
       const data = await response.json();
-      setCleaners(data.cleaners || []);
+      const nonAdmins = (data.cleaners || []).filter((c: any) => (c.role || 'cleaner') !== 'admin');
+      setCleaners(nonAdmins);
       setError(null);
     } catch (err) {
       console.error('Error loading cleaners:', err);
@@ -308,6 +309,7 @@ export const useCleaners = () => {
       cleaner =>
         cleaner &&
         cleaner.isActive &&
+        (cleaner as any).role !== 'admin' &&
         availabilityMap[cleaner.id] &&
         availabilityMap[cleaner.id].month === month &&
         availabilityMap[cleaner.id].dates.includes(dateStr)

@@ -191,16 +191,26 @@ export const useAvailability = () => {
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
-        return { id: newDoc.id, cleanerId, month, availableDates };
+      } else {
+        const docRef = snap.docs[0].ref;
+        await updateDoc(docRef, {
+          availableDates,
+          updatedAt: serverTimestamp(),
+        });
       }
 
-      const docRef = snap.docs[0].ref;
-      await updateDoc(docRef, {
-        availableDates,
-        updatedAt: serverTimestamp(),
-      });
+      // Notify admins via Cloud Function
+      try {
+        await fetch('https://sendavailabilityupdate-463sryhoiq-uc.a.run.app', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cleanerId, month, dates: availableDates })
+        });
+      } catch (notifyErr) {
+        console.warn('Notify admins failed (non-blocking):', notifyErr);
+      }
 
-      return { id: docRef.id, cleanerId, month, availableDates };
+      return { cleanerId, month, availableDates } as any;
     } catch (err) {
       console.error('Error updating cleaner availability:', err);
       setError(err instanceof Error ? err.message : 'Failed to update cleaner availability');

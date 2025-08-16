@@ -371,3 +371,59 @@ export const sendAvailabilityLink = onRequest({ cors: true }, async (req, res) =
     res.status(500).json({ error: 'Failed to send availability link' });
   }
 }); 
+
+// Notify admins when a cleaner updates availability
+export const notifyAvailabilityUpdate = onRequest({ cors: true }, async (req, res) => {
+  try {
+    if (req.method !== 'POST') { res.status(405).send('Method Not Allowed'); return; }
+
+    const { cleanerId, month, dates } = req.body || {};
+    if (!cleanerId || !month || !Array.isArray(dates)) {
+      res.status(400).json({ error: 'cleanerId, month, and dates[] are required' });
+      return;
+    }
+
+    // Get cleaner
+    const cleanerDoc = await db.collection('cleaners').doc(cleanerId).get();
+    if (!cleanerDoc.exists) { res.status(404).json({ error: 'Cleaner not found' }); return; }
+    const cleaner = { id: cleanerDoc.id, ...cleanerDoc.data() } as Cleaner;
+
+    // Get admins with lineUserId
+    const adminsSnap = await db.collection('cleaners').where('role', '==', 'admin').where('isActive', '==', true).get();
+    const admins = adminsSnap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+    const recipients = admins.filter(a => a.lineUserId);
+
+    if (recipients.length === 0) { res.status(200).json({ success: true, message: 'No admins with LINE IDs' }); return; }
+
+    // Format month and dates in Japanese
+    const dateObj = new Date(month + '-01');
+    const monthName = dateObj.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' });
+    const sortedDates = [...dates].sort();
+    const datesText = sortedDates.length > 0 ? sortedDates.map((d: string) => {
+      const dt = new Date(d);
+      const day = dt.toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', weekday: 'short' });
+      return `・${day}`;
+    }).join('\n') : '（未選択）';
+
+    const text = `📣 空き状況更新のお知らせ\n\n${cleaner.name} さんが ${monthName} の空き状況を更新しました。\n\n日程:\n${datesText}`;
+
+    // Send to each admin
+    await Promise.all(recipients.map(admin => sendLineMessage(admin.lineUserId, { type: 'text', text })));
+
+    // Log notification
+    await db.collection('line-notifications').add({
+      type: 'availability-updated',
+      cleanerId,
+      month,
+      dateCount: sortedDates.length,
+      recipients: recipients.map(r => r.id),
+      sentAt: admin.firestore.FieldValue.serverTimestamp(),
+      status: 'sent'
+    });
+
+    res.status(200).json({ success: true, notified: recipients.length });
+  } catch (error) {
+    console.error('Error notifying admins of availability update:', error);
+    res.status(500).json({ error: 'Failed to notify admins' });
+  }
+}); 
