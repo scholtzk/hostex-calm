@@ -226,7 +226,7 @@ export const useCleaners = () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ cleanerId: null, cleanerName: null }),
+        body: JSON.stringify({ cleanerId: null, cleanerName: null, bookingId: assignment.bookingId }),
       });
 
       if (!response.ok) {

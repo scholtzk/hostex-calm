@@ -11,11 +11,12 @@ const db = admin.firestore();
 export const getAdmins = onRequest({ cors: true }, async (req, res) => {
   try {
     if (req.method !== 'GET') { res.status(405).send('Method Not Allowed'); return; }
-    const snap = await db.collection('admins').where('isActive', '==', true).orderBy('name').get();
-    const admins = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const snap = await db.collection('admins').where('isActive', '==', true).get();
+    const admins = snap.docs.map(d => ({ id: d.id, ...d.data() as any })) as any[];
+    admins.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     res.status(200).json({ admins });
-  } catch (e) {
-    console.error('getAdmins error', e);
+  } catch (e: any) {
+    console.error('getAdmins error', e?.message || e);
     res.status(500).json({ error: 'Failed to fetch admins' });
   }
 });

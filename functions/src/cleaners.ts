@@ -15,10 +15,10 @@ export const getCleaners = onRequest({ cors: true }, async (req, res) => {
 
     const cleanersSnapshot = await db.collection('cleaners')
       .where('isActive', '==', true)
-      .orderBy('name')
       .get();
 
-    const cleaners = cleanersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const cleaners = cleanersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as any })) as any[];
+    cleaners.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     res.status(200).json({ cleaners });
   } catch (error) {
     console.error('Error fetching cleaners:', error);
