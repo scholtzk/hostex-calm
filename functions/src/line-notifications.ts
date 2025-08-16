@@ -1,6 +1,6 @@
-import * as functions from 'firebase-functions';
+import { onRequest } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
-import * as cors from 'cors';
+
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -8,8 +8,7 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
-// CORS handler allowing any origin (change if needed)
-const corsHandler = cors({ origin: '*', methods: ['POST', 'OPTIONS'], allowedHeaders: ['Content-Type'] });
+// CORS handled by onRequest({ cors: true })
 
 // Base URL where the front-end (availability calendar) is hosted
 // Helper to build full calendar URL at runtime (hash-based for GitHub Pages compatibility)
@@ -60,41 +59,17 @@ async function sendLineMessage(userId: string, message: LineMessage) {
   try {
     const response = await fetch('https://api.line.me/v2/bot/message/push', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${LINE_CHANNEL_ACCESS_TOKEN}`
-      },
-      body: JSON.stringify({
-        to: userId,
-        messages: [message]
-      })
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${LINE_CHANNEL_ACCESS_TOKEN}` },
+      body: JSON.stringify({ to: userId, messages: [message] })
     });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('LINE API Error:', response.status, errorText);
-      throw new Error(`LINE API Error: ${response.status}`);
-    }
-
+    if (!response.ok) { const errorText = await response.text(); console.error('LINE API Error:', response.status, errorText); throw new Error(`LINE API Error: ${response.status}`); }
     return await response.json();
-  } catch (error) {
-    console.error('Error sending LINE message:', error);
-    throw error;
-  }
+  } catch (error) { console.error('Error sending LINE message:', error); throw error; }
 }
 
 // Test function to verify LINE API integration
-export const testLineAPI = functions.https.onRequest(async (req, res) => {
+export const testLineAPI = onRequest({ cors: true }, async (req, res) => {
   try {
-    res.set('Access-Control-Allow-Origin', '*');
-    res.set('Access-Control-Allow-Methods', 'POST');
-    res.set('Access-Control-Allow-Headers', 'Content-Type');
-
-    if (req.method === 'OPTIONS') {
-      res.status(204).send('');
-      return;
-    }
-
     if (req.method !== 'POST') {
       res.status(405).send('Method Not Allowed');
       return;
@@ -162,10 +137,7 @@ function createScheduleMessage(assignments: CleaningAssignment[], cleaner: Clean
     scheduleText += `${formattedDate}: ${assignment.guestName || 'N/A'} ${status}\n`;
   });
 
-  return {
-    type: 'text',
-    text: scheduleText
-  };
+  return { type: 'text', text: scheduleText };
 }
 
 // Create simple monthly schedule message
@@ -182,75 +154,35 @@ function createMonthlyScheduleMessage(assignments: CleaningAssignment[], cleaner
     const formattedDate = new Date((assignment as any).currentCleaningDate || assignment.date).toLocaleDateString('ja-JP', { month: 'short', day: 'numeric', weekday: 'short' });
     let guestsText;
     const g: any = (assignment as any).guests;
-    if (typeof g === 'number') {
-      guestsText = `${g}名`;
-    } else if (typeof g === 'string') {
-      guestsText = g; // could be 'ERROR'
-    } else {
-      guestsText = 'ERROR';
-    }
+    if (typeof g === 'number') guestsText = `${g}名`;
+    else if (typeof g === 'string') guestsText = g; else guestsText = 'ERROR';
     const statusIcon = assignment.status === 'completed' ? '✅' : assignment.status === 'in-progress' ? '🚧' : '⏳';
     scheduleText += `${formattedDate}: ${guestsText} ${statusIcon}\n`;
   });
 
-  return {
-    type: 'text',
-    text: scheduleText
-  };
+  return { type: 'text', text: scheduleText };
 }
 
 // Send cleaning reminder to a specific cleaner
-export const sendCleaningReminder = functions.https.onRequest(async (req, res) => {
+export const sendCleaningReminder = onRequest({ cors: true }, async (req, res) => {
   try {
-    res.set('Access-Control-Allow-Origin', '*');
-    res.set('Access-Control-Allow-Methods', 'POST');
-    res.set('Access-Control-Allow-Headers', 'Content-Type');
-
-    if (req.method === 'OPTIONS') {
-      res.status(204).send('');
-      return;
-    }
-
-    if (req.method !== 'POST') {
-      res.status(405).send('Method Not Allowed');
-      return;
-    }
+    if (req.method !== 'POST') { res.status(405).send('Method Not Allowed'); return; }
 
     const { assignmentId, cleanerId } = req.body;
+    if (!assignmentId || !cleanerId) { res.status(400).json({ error: 'assignmentId and cleanerId are required' }); return; }
 
-    if (!assignmentId || !cleanerId) {
-      res.status(400).json({ error: 'assignmentId and cleanerId are required' });
-      return;
-    }
-
-    // Get cleaner information
     const cleanerDoc = await db.collection('cleaners').doc(cleanerId).get();
-    if (!cleanerDoc.exists) {
-      res.status(404).json({ error: 'Cleaner not found' });
-      return;
-    }
-
+    if (!cleanerDoc.exists) { res.status(404).json({ error: 'Cleaner not found' }); return; }
     const cleaner = { id: cleanerDoc.id, ...cleanerDoc.data() } as Cleaner;
+    if (!cleaner.lineUserId) { res.status(400).json({ error: 'Cleaner does not have LINE user ID configured' }); return; }
 
-    if (!cleaner.lineUserId) {
-      res.status(400).json({ error: 'Cleaner does not have LINE user ID configured' });
-      return;
-    }
-
-    // Get assignment information
     const assignmentDoc = await db.collection('cleaning-assignments').doc(assignmentId).get();
-    if (!assignmentDoc.exists) {
-      res.status(404).json({ error: 'Assignment not found' });
-      return;
-    }
+    if (!assignmentDoc.exists) { res.status(404).json({ error: 'Assignment not found' }); return; }
 
     const assignment = { id: assignmentDoc.id, ...assignmentDoc.data() } as CleaningAssignment;
-
-    // Create and send reminder message
     const message = createCleaningReminderMessage(assignment, cleaner);
     await sendLineMessage(cleaner.lineUserId, message);
 
-    // Log the notification
     await db.collection('line-notifications').add({
       cleanerId,
       assignmentId,
@@ -267,69 +199,32 @@ export const sendCleaningReminder = functions.https.onRequest(async (req, res) =
 });
 
 // Send weekly schedule to a cleaner
-export const sendWeeklySchedule = functions.https.onRequest(async (req, res) => {
+export const sendWeeklySchedule = onRequest({ cors: true }, async (req, res) => {
   try {
-    res.set('Access-Control-Allow-Origin', '*');
-    res.set('Access-Control-Allow-Methods', 'POST');
-    res.set('Access-Control-Allow-Headers', 'Content-Type');
-
-    if (req.method === 'OPTIONS') {
-      res.status(204).send('');
-      return;
-    }
-
-    if (req.method !== 'POST') {
-      res.status(405).send('Method Not Allowed');
-      return;
-    }
+    if (req.method !== 'POST') { res.status(405).send('Method Not Allowed'); return; }
 
     const { cleanerId, weekStart } = req.body;
+    if (!cleanerId || !weekStart) { res.status(400).json({ error: 'cleanerId and weekStart are required' }); return; }
 
-    if (!cleanerId || !weekStart) {
-      res.status(400).json({ error: 'cleanerId and weekStart are required' });
-      return;
-    }
-
-    // Get cleaner information
     const cleanerDoc = await db.collection('cleaners').doc(cleanerId).get();
-    if (!cleanerDoc.exists) {
-      res.status(404).json({ error: 'Cleaner not found' });
-      return;
-    }
-
+    if (!cleanerDoc.exists) { res.status(404).json({ error: 'Cleaner not found' }); return; }
     const cleaner = { id: cleanerDoc.id, ...cleanerDoc.data() } as Cleaner;
+    if (!cleaner.lineUserId) { res.status(400).json({ error: 'Cleaner does not have LINE user ID configured' }); return; }
 
-    if (!cleaner.lineUserId) {
-      res.status(400).json({ error: 'Cleaner does not have LINE user ID configured' });
-      return;
-    }
+    const weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate() + 6);
 
-    // Calculate week end date
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekEnd.getDate() + 6);
-
-    // Get assignments for the week
     const assignmentsSnapshot = await db.collection('cleaning-assignments')
       .where('cleanerId', '==', cleanerId)
       .where('date', '>=', weekStart)
       .where('date', '<=', weekEnd.toISOString().split('T')[0])
       .get();
 
-    const assignments = assignmentsSnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    })) as CleaningAssignment[];
+    const assignments = assignmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as CleaningAssignment[];
+    if (assignments.length === 0) { res.status(200).json({ success: true, message: 'No assignments for this week' }); return; }
 
-    if (assignments.length === 0) {
-      res.status(200).json({ success: true, message: 'No assignments for this week' });
-      return;
-    }
-
-    // Create and send schedule message
     const message = createScheduleMessage(assignments, cleaner, weekStart);
     await sendLineMessage(cleaner.lineUserId, message);
 
-    // Log the notification
     await db.collection('line-notifications').add({
       cleanerId,
       weekStart,
@@ -339,11 +234,7 @@ export const sendWeeklySchedule = functions.https.onRequest(async (req, res) => 
       assignmentCount: assignments.length
     });
 
-    res.status(200).json({ 
-      success: true, 
-      message: 'Schedule sent successfully',
-      assignmentCount: assignments.length
-    });
+    res.status(200).json({ success: true, message: 'Schedule sent successfully', assignmentCount: assignments.length });
   } catch (error) {
     console.error('Error sending weekly schedule:', error);
     res.status(500).json({ error: 'Failed to send schedule' });
@@ -351,73 +242,41 @@ export const sendWeeklySchedule = functions.https.onRequest(async (req, res) => 
 });
 
 // Send monthly cleaning assignments to all cleaners
-export const sendMonthlyAssignments = functions.https.onRequest((req, res) => {
-  corsHandler(req, res, async () => {
+export const sendMonthlyAssignments = onRequest({ cors: true }, async (req, res) => {
   try {
-    if (req.method !== 'POST') {
-      res.status(405).send('Method Not Allowed');
-      return;
-    }
+    if (req.method !== 'POST') { res.status(405).send('Method Not Allowed'); return; }
 
-    const { month } = req.body; // month format: YYYY-MM
-
-    if (!month || !/^\d{4}-\d{2}$/.test(month)) {
-      res.status(400).json({ error: 'month is required in YYYY-MM format' });
-      return;
-    }
+    const { month } = req.body; // YYYY-MM
+    if (!month || !/^\d{4}-\d{2}$/.test(month)) { res.status(400).json({ error: 'month is required in YYYY-MM format' }); return; }
 
     const monthStart = `${month}-01`;
-    const monthEndDate = new Date(monthStart);
-    monthEndDate.setMonth(monthEndDate.getMonth() + 1);
-    monthEndDate.setDate(0); // last day of previous month which is month end
+    const monthEndDate = new Date(monthStart); monthEndDate.setMonth(monthEndDate.getMonth() + 1); monthEndDate.setDate(0);
     const monthEnd = monthEndDate.toISOString().split('T')[0];
 
-    // Fetch all assignments in the month
     const assignmentsSnap = await db.collection('cleaning-assignments')
       .where('currentCleaningDate', '>=', monthStart)
       .where('currentCleaningDate', '<=', monthEnd)
       .get();
 
     const assignments: CleaningAssignment[] = assignmentsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as CleaningAssignment[];
+    if (assignments.length === 0) { res.status(200).json({ success: true, message: 'No assignments for this month' }); return; }
 
-    if (assignments.length === 0) {
-      res.status(200).json({ success: true, message: 'No assignments for this month' });
-      return;
-    }
-
-    // Load bookings data for assignments
     const bookingCache: Record<string, any> = {};
     const getBooking = async (bookingId: string) => {
       if (bookingCache[bookingId]) return bookingCache[bookingId];
-      try {
-        const doc = await db.collection('bookings').doc(bookingId).get();
-        if (doc.exists) {
-          const data = doc.data();
-          bookingCache[bookingId] = data;
-          return data;
-        }
-      } catch {}
+      try { const doc = await db.collection('bookings').doc(bookingId).get(); if (doc.exists) { const data = doc.data(); bookingCache[bookingId] = data; return data; } } catch {}
       return null;
     };
 
-    // Group by cleanerId
     const assignmentsByCleaner: Record<string, CleaningAssignment[]> = {};
-    assignments.forEach(a => {
-      if (!a.cleanerId) return; // skip unassigned
-      if (!assignmentsByCleaner[a.cleanerId]) assignmentsByCleaner[a.cleanerId] = [];
-      assignmentsByCleaner[a.cleanerId].push(a);
-    });
+    assignments.forEach(a => { if (!a.cleanerId) return; if (!assignmentsByCleaner[a.cleanerId]) assignmentsByCleaner[a.cleanerId] = []; assignmentsByCleaner[a.cleanerId].push(a); });
 
     let totalMessagesSent = 0;
-
-    // Iterate cleaners
     for (const [cleanerId, cleanerAssignments] of Object.entries(assignmentsByCleaner)) {
       const cleanerDoc = await db.collection('cleaners').doc(cleanerId).get();
-      if (!cleanerDoc.exists) continue; // skip missing cleaner
-      const cleaner = { id: cleanerDoc.id, ...cleanerDoc.data() } as Cleaner;
-      if (!cleaner.lineUserId) continue; // skip if no LINE user
+      if (!cleanerDoc.exists) continue; const cleaner = { id: cleanerDoc.id, ...cleanerDoc.data() } as Cleaner;
+      if (!cleaner.lineUserId) continue;
 
-      // Attach guest count to each assignment for message
       const assignmentsWithGuests = await Promise.all(
         cleanerAssignments.map(async (asgn: any) => {
           const booking = await getBooking(asgn.bookingId);
@@ -431,26 +290,10 @@ export const sendMonthlyAssignments = functions.https.onRequest((req, res) => {
       try {
         await sendLineMessage(cleaner.lineUserId, message);
         totalMessagesSent++;
-        // Log
-        await db.collection('line-notifications').add({
-          cleanerId,
-          month,
-          messageType: 'monthly-schedule',
-          sentAt: admin.firestore.FieldValue.serverTimestamp(),
-          status: 'sent',
-          assignmentCount: cleanerAssignments.length
-        });
+        await db.collection('line-notifications').add({ cleanerId, month, messageType: 'monthly-schedule', sentAt: admin.firestore.FieldValue.serverTimestamp(), status: 'sent', assignmentCount: cleanerAssignments.length });
       } catch (err) {
         console.error('Failed to send monthly schedule to', cleanerId, err);
-        await db.collection('line-notifications').add({
-          cleanerId,
-          month,
-          messageType: 'monthly-schedule',
-          sentAt: admin.firestore.FieldValue.serverTimestamp(),
-          status: 'failed',
-          assignmentCount: cleanerAssignments.length,
-          error: err instanceof Error ? err.message : 'Unknown error'
-        });
+        await db.collection('line-notifications').add({ cleanerId, month, messageType: 'monthly-schedule', sentAt: admin.firestore.FieldValue.serverTimestamp(), status: 'failed', assignmentCount: cleanerAssignments.length, error: err instanceof Error ? err.message : 'Unknown error' });
       }
     }
 
@@ -459,48 +302,25 @@ export const sendMonthlyAssignments = functions.https.onRequest((req, res) => {
     console.error('Error sending monthly assignments:', error);
     res.status(500).json({ error: 'Failed to send monthly assignments' });
   }
-  });
 });
 
 // Webhook to handle LINE bot responses
-export const lineWebhook = functions.https.onRequest(async (req, res) => {
+export const lineWebhook = onRequest({ cors: true }, async (req, res) => {
   try {
-    if (req.method !== 'POST') {
-      res.status(405).send('Method Not Allowed');
-      return;
-    }
+    if (req.method !== 'POST') { res.status(405).send('Method Not Allowed'); return; }
 
     const { events } = req.body;
-
     for (const event of events) {
       if (event.type === 'postback') {
         const data = event.postback.data;
         const [action, assignmentId] = data.split(':');
 
         if (action === 'start_cleaning') {
-          // Update assignment status to in-progress
-          await db.collection('cleaning-assignments').doc(assignmentId).update({
-            status: 'in-progress',
-            startedAt: admin.firestore.FieldValue.serverTimestamp()
-          });
-
-          // Send confirmation message
-          await sendLineMessage(event.source.userId, {
-            type: 'text',
-            text: '清掃を開始しました。完了したら「完了」ボタンを押してください。'
-          });
+          await db.collection('cleaning-assignments').doc(assignmentId).update({ status: 'in-progress', startedAt: admin.firestore.FieldValue.serverTimestamp() });
+          await sendLineMessage(event.source.userId, { type: 'text', text: '清掃を開始しました。完了したら「完了」ボタンを押してください。' });
         } else if (action === 'complete_cleaning') {
-          // Update assignment status to completed
-          await db.collection('cleaning-assignments').doc(assignmentId).update({
-            status: 'completed',
-            completedAt: admin.firestore.FieldValue.serverTimestamp()
-          });
-
-          // Send confirmation message
-          await sendLineMessage(event.source.userId, {
-            type: 'text',
-            text: '清掃完了を記録しました。お疲れさまでした！'
-          });
+          await db.collection('cleaning-assignments').doc(assignmentId).update({ status: 'completed', completedAt: admin.firestore.FieldValue.serverTimestamp() });
+          await sendLineMessage(event.source.userId, { type: 'text', text: '清掃完了を記録しました。お疲れさまでした！' });
         }
       }
     }
@@ -510,66 +330,44 @@ export const lineWebhook = functions.https.onRequest(async (req, res) => {
     console.error('Error handling LINE webhook:', error);
     res.status(500).send('Internal Server Error');
   }
-}); 
+});
 
-export const sendAvailabilityLink = functions.https.onRequest(async (req, res) => {
-  corsHandler(req, res, async () => {
+// Helper referenced above
+async function getNextBookingGuests(booking: any): Promise<number | null> {
   try {
-    // Handle preflight is already managed by corsHandler
+    if (!booking) return null;
+    if (typeof booking.guests === 'number') return booking.guests;
+    return null;
+  } catch {
+    return null;
+  }
+}
 
-    if (req.method !== 'POST') {
-      res.status(405).send('Method Not Allowed');
-      return;
-    }
+// Send availability link to cleaner
+export const sendAvailabilityLink = onRequest({ cors: true }, async (req, res) => {
+  try {
+    if (req.method !== 'POST') { res.status(405).send('Method Not Allowed'); return; }
 
     const { cleanerId, uniqueLink, month } = req.body;
+    if (!cleanerId || !uniqueLink || !month) { res.status(400).json({ error: 'cleanerId, uniqueLink and month are required' }); return; }
 
-    if (!cleanerId || !uniqueLink || !month) {
-      res.status(400).json({ error: 'cleanerId, uniqueLink and month are required' });
-      return;
-    }
-
-    // Fetch cleaner data
     const cleanerDoc = await db.collection('cleaners').doc(cleanerId).get();
-    if (!cleanerDoc.exists) {
-      res.status(404).json({ error: 'Cleaner not found' });
-      return;
-    }
+    if (!cleanerDoc.exists) { res.status(404).json({ error: 'Cleaner not found' }); return; }
     const cleaner = { id: cleanerDoc.id, ...cleanerDoc.data() } as Cleaner;
+    if (!cleaner.lineUserId) { res.status(400).json({ error: 'Cleaner does not have LINE user ID configured' }); return; }
 
-    if (!cleaner.lineUserId) {
-      res.status(400).json({ error: 'Cleaner does not have LINE user ID configured' });
-      return;
-    }
-
-    // Construct full link based on Firebase hosting or custom domain
     const linkUrl = buildCalendarLink(uniqueLink);
 
-    // Build message
     const dateObj = new Date(month + '-01');
     const monthName = dateObj.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' });
-    const message: LineMessage = {
-      type: 'text',
-      text: `📆 ${cleaner.name}さん\n\n${monthName} の勤務可能日を入力してください。\n以下のリンクからカレンダーを開いて、空いている日を選択してください👇\n${linkUrl}`
-    };
+    const message: LineMessage = { type: 'text', text: `📆 ${cleaner.name}さん\n\n${monthName} の勤務可能日を入力してください。\n以下のリンクからカレンダーを開いて、空いている日を選択してください👇\n${linkUrl}` };
 
-    // Send LINE message
     await sendLineMessage(cleaner.lineUserId, message);
-
-    // Log notification
-    await db.collection('line-notifications').add({
-      cleanerId,
-      messageType: 'availability-link',
-      link: uniqueLink,
-      month,
-      sentAt: admin.firestore.FieldValue.serverTimestamp(),
-      status: 'sent'
-    });
+    await db.collection('line-notifications').add({ cleanerId, messageType: 'availability-link', link: uniqueLink, month, sentAt: admin.firestore.FieldValue.serverTimestamp(), status: 'sent' });
 
     res.status(200).json({ success: true, message: 'Availability link sent successfully' });
   } catch (error) {
     console.error('Error sending availability link notification:', error);
     res.status(500).json({ error: 'Failed to send availability link' });
   }
-  });
 }); 

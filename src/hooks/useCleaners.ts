@@ -14,7 +14,8 @@ export const useCleaners = () => {
   const loadCleaners = async () => {
     try {
       setLoading(true);
-      const response = await fetch('https://us-central1-property-manager-cf570.cloudfunctions.net/getCleaners');
+      const corsPrefix = window.location.hostname.endsWith('github.io') ? 'https://cors.isomorphic-git.org/' : '';
+      const response = await fetch(`${corsPrefix}https://us-central1-property-manager-cf570.cloudfunctions.net/getCleaners`);
       
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -33,7 +34,8 @@ export const useCleaners = () => {
 
   const loadAssignments = async () => {
     try {
-      const response = await fetch('https://getcleaningassignments-463sryhoiq-uc.a.run.app');
+      const corsPrefix = window.location.hostname.endsWith('github.io') ? 'https://cors.isomorphic-git.org/' : '';
+      const response = await fetch(`${corsPrefix}https://getcleaningassignments-463sryhoiq-uc.a.run.app`);
       
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -88,7 +90,8 @@ export const useCleaners = () => {
       });
 
       // Use the new update cleaner assignment endpoint
-      let response = await fetch(`https://us-central1-property-manager-cf570.cloudfunctions.net/updateCleanerAssignment/${assignment.date}`, {
+      const corsPrefix = window.location.hostname.endsWith('github.io') ? 'https://cors.isomorphic-git.org/' : '';
+      let response = await fetch(`${corsPrefix}https://us-central1-property-manager-cf570.cloudfunctions.net/updateCleanerAssignment/${assignment.date}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -106,7 +109,7 @@ export const useCleaners = () => {
           const originalBookingDate = assignment.originalBookingDate || assignment.date; // fallback
           const guestName = assignment.guestName || '';
           console.log('Assignment missing - creating then retrying...', { originalBookingDate, currentCleaningDate: assignment.date, bookingId: assignment.bookingId });
-          const createResp = await fetch('https://us-central1-property-manager-cf570.cloudfunctions.net/createOrUpdateCleaningAssignment', {
+          const createResp = await fetch(`${corsPrefix}https://us-central1-property-manager-cf570.cloudfunctions.net/createOrUpdateCleaningAssignment`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -122,7 +125,7 @@ export const useCleaners = () => {
             throw new Error(`HTTP ${createResp.status}: ${createText}`);
           }
           // Retry PATCH with bookingId
-          response = await fetch(`https://us-central1-property-manager-cf570.cloudfunctions.net/updateCleanerAssignment/${assignment.date}`, {
+          response = await fetch(`${corsPrefix}https://us-central1-property-manager-cf570.cloudfunctions.net/updateCleanerAssignment/${assignment.date}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ cleanerId: assignment.cleanerId, cleanerName: cleanerName, bookingId: assignment.bookingId })
@@ -144,7 +147,7 @@ export const useCleaners = () => {
       
       // Since loadAssignments updates the state asynchronously, we need to wait a bit
       // or fetch the data directly to get the updated assignment
-      const refreshResponse = await fetch('https://getcleaningassignments-463sryhoiq-uc.a.run.app');
+      const refreshResponse = await fetch(`${corsPrefix}https://getcleaningassignments-463sryhoiq-uc.a.run.app`);
       const refreshData = await refreshResponse.json();
       const assignments = refreshData.assignments || [];
       
@@ -220,7 +223,8 @@ export const useCleaners = () => {
       console.log('Found assignment:', assignment);
 
       // Use the new update cleaner assignment endpoint
-      const response = await fetch(`https://us-central1-property-manager-cf570.cloudfunctions.net/updateCleanerAssignment/${assignment.date}`, {
+      const corsPrefix = window.location.hostname.endsWith('github.io') ? 'https://cors.isomorphic-git.org/' : '';
+      const response = await fetch(`${corsPrefix}https://us-central1-property-manager-cf570.cloudfunctions.net/updateCleanerAssignment/${assignment.date}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
