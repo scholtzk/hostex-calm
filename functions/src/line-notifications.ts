@@ -14,8 +14,8 @@ const corsHandler = cors({ origin: '*', methods: ['POST', 'OPTIONS'], allowedHea
 // Base URL where the front-end (availability calendar) is hosted
 // Helper to build full calendar URL at runtime (hash-based for GitHub Pages compatibility)
 const buildCalendarLink = (uniqueLink: string) => {
-  const base = process.env.FRONTEND_BASE_URL || 'https://property-manager-cf570.web.app';
-  const basePath = process.env.FRONTEND_BASE_PATH || '';
+  const base = process.env.FRONTEND_BASE_URL || 'https://scholtzk.github.io';
+  const basePath = process.env.FRONTEND_BASE_PATH || '/CleaningManager/';
   const trimmed = basePath.endsWith('/') ? basePath.slice(0, -1) : basePath;
   return `${base}${trimmed}#/availability/${uniqueLink}`;
 };
