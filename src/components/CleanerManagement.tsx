@@ -13,7 +13,10 @@ export const CleanerManagement = () => {
   const { cleaners, loadCleaners } = useCleaners();
   const [newCleaner, setNewCleaner] = useState({
     name: '',
-    flatRate: ''
+    flatRate: '',
+    email: '',
+    lineUserId: '',
+    role: 'cleaner'
   });
 
   const [editingCleaner, setEditingCleaner] = useState<any>(null);
@@ -41,8 +44,10 @@ export const CleanerManagement = () => {
       currency: 'JPY',
       isActive: true,
       phone: '',
-      email: '',
-      specialties: []
+      email: newCleaner.email || '',
+      lineUserId: newCleaner.lineUserId || '',
+      specialties: [],
+      role: newCleaner.role
     };
 
     try {
@@ -58,7 +63,10 @@ export const CleanerManagement = () => {
         alert('Cleaner added successfully!');
         setNewCleaner({
           name: '',
-          flatRate: ''
+          flatRate: '',
+          email: '',
+          lineUserId: '',
+          role: 'cleaner'
         });
         loadCleaners(); // Refresh the list
       } else {
@@ -231,6 +239,37 @@ export const CleanerManagement = () => {
                   placeholder="Enter hourly rate"
                   required
                 />
+              </div>
+              <div>
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={newCleaner.email}
+                  onChange={(e) => setNewCleaner({...newCleaner, email: e.target.value})}
+                  placeholder="name@example.com"
+                />
+              </div>
+              <div>
+                <Label htmlFor="lineUserId">LINE User ID</Label>
+                <Input
+                  id="lineUserId"
+                  value={newCleaner.lineUserId}
+                  onChange={(e) => setNewCleaner({...newCleaner, lineUserId: e.target.value})}
+                  placeholder="U1234567890abcdef"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <Label htmlFor="role">Role</Label>
+                <Select value={newCleaner.role} onValueChange={(v) => setNewCleaner({...newCleaner, role: v})}>
+                  <SelectTrigger id="role">
+                    <SelectValue placeholder="Select role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cleaner">Cleaner</SelectItem>
+                    <SelectItem value="admin">Admin</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div className="text-sm text-muted-foreground">

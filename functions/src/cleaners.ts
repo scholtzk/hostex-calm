@@ -26,16 +26,28 @@ export const getCleaners = onRequest({ cors: true }, async (req, res) => {
   }
 });
 
-// POST /cleaners - Create a new cleaner
+// POST /cleaners - Create a new cleaner/admin
 export const createCleaner = onRequest({ cors: true }, async (req, res) => {
   try {
     if (req.method !== 'POST') { res.status(405).send('Method Not Allowed'); return; }
 
-    const cleanerData = req.body;
-    if (!cleanerData.name) { res.status(400).json({ error: 'Name is required' }); return; }
+    const { name, flatRate, email, lineUserId, phone, specialties, role } = req.body || {};
+    if (!name) { res.status(400).json({ error: 'Name is required' }); return; }
 
     const now = admin.firestore.FieldValue.serverTimestamp();
-    const newCleaner = { ...cleanerData, isActive: true, createdAt: now, updatedAt: now };
+    const newCleaner: any = {
+      name,
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+      role: role === 'admin' ? 'admin' : 'cleaner'
+    };
+    if (typeof flatRate === 'number') newCleaner.flatRate = flatRate;
+    if (email) newCleaner.email = email;
+    if (lineUserId) newCleaner.lineUserId = lineUserId;
+    if (phone) newCleaner.phone = phone;
+    if (Array.isArray(specialties)) newCleaner.specialties = specialties;
+
     const docRef = await db.collection('cleaners').add(newCleaner);
     res.status(201).json({ id: docRef.id, ...newCleaner });
   } catch (error) {
@@ -50,9 +62,10 @@ export const updateCleaner = onRequest({ cors: true }, async (req, res) => {
     if (req.method !== 'PUT') { res.status(405).send('Method Not Allowed'); return; }
 
     const cleanerId = req.params[0];
-    const updateData = req.body;
+    const updateData = req.body || {};
     if (!updateData.name) { res.status(400).json({ error: 'Name is required' }); return; }
     updateData.updatedAt = admin.firestore.FieldValue.serverTimestamp();
+    if (updateData.role && updateData.role !== 'cleaner' && updateData.role !== 'admin') delete updateData.role;
 
     await db.collection('cleaners').doc(cleanerId).update(updateData);
     res.status(200).json({ message: 'Cleaner updated successfully' });
