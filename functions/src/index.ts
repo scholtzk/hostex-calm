@@ -29,5 +29,7 @@ export const bookings = onRequest({ cors: true }, (request, response) => {
   });
 });
 
-// Re-export LINE notification related cloud functions
+// Export additional HTTPS functions (v2)
 export * from './line-notifications';
+export * from './cleaners';
+export * from './cleaning-assignments';
