@@ -1,0 +1,45 @@
+name: Deploy Firebase Functions
+
+on:
+  workflow_dispatch:
+    inputs:
+      only:
+        description: "Deploy scope (e.g. functions, functions:line-notifications)"
+        required: false
+        default: "functions"
+  push:
+    branches: [ main ]
+    paths:
+      - 'functions/**'
+      - 'firebase.json'
+      - '.firebaserc'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Functions deps
+        working-directory: functions
+        run: npm ci
+
+      - name: Install Firebase CLI
+        run: npm i -g firebase-tools@13
+
+      - name: Deploy
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: |
+          if [ -n "${{ github.event.inputs.only }}" ]; then
+            firebase deploy --only ${{ github.event.inputs.only }} --non-interactive
+          else
+            firebase deploy --only functions --non-interactive
+          fi 
