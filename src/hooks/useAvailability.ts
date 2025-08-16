@@ -201,11 +201,15 @@ export const useAvailability = () => {
 
       // Notify admins via Cloud Function
       try {
-        await fetch('https://sendavailabilityupdate-463sryhoiq-uc.a.run.app', {
+        const resp = await fetch('https://us-central1-property-manager-cf570.cloudfunctions.net/notifyAvailabilityUpdate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ cleanerId, month, dates: availableDates })
         });
+        if (!resp.ok) {
+          const t = await resp.text().catch(()=>'');
+          console.warn('Notify admins failed:', resp.status, t);
+        }
       } catch (notifyErr) {
         console.warn('Notify admins failed (non-blocking):', notifyErr);
       }
