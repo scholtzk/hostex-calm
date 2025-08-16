@@ -11,6 +11,22 @@ import { User, Edit, Trash2, History, MessageSquare, Calendar } from 'lucide-rea
 
 export const CleanerManagement = () => {
   const { cleaners, loadCleaners } = useCleaners();
+  const [admins, setAdmins] = useState<any[]>([]);
+  const loadAdmins = async () => {
+    try {
+      const res = await fetch('https://us-central1-property-manager-cf570.cloudfunctions.net/getAdmins');
+      if (res.ok) {
+        const data = await res.json();
+        setAdmins(data.admins || []);
+      }
+    } catch (e) {
+      console.warn('Failed to load admins');
+    }
+  };
+  
+  // Load admins on mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useState(() => { loadAdmins(); });
   const [newCleaner, setNewCleaner] = useState({
     name: '',
     flatRate: '',
@@ -39,28 +55,37 @@ export const CleanerManagement = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    const cleanerData = {
-      name: newCleaner.name,
-      flatRate: parseInt(newCleaner.flatRate),
-      currency: 'JPY',
-      isActive: true,
-      phone: '',
-      email: newCleaner.email || '',
-      lineUserId: newCleaner.lineUserId || '',
-      specialties: [],
-      role: newCleaner.role
-    };
-
     try {
-      const response = await fetch('https://us-central1-property-manager-cf570.cloudfunctions.net/createCleaner', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(cleanerData)
-      });
+      let ok = false;
+      if (newCleaner.role === 'admin') {
+        // Create admin in separate collection
+        const resp = await fetch('https://us-central1-property-manager-cf570.cloudfunctions.net/createAdmin', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: newCleaner.name, email: newCleaner.email || '', lineUserId: newCleaner.lineUserId || '', phone: '' })
+        });
+        ok = resp.ok;
+        if (ok) await loadAdmins();
+      } else {
+        // Create cleaner
+        const cleanerData = {
+          name: newCleaner.name,
+          flatRate: parseInt(newCleaner.flatRate),
+          currency: 'JPY',
+          isActive: true,
+          phone: '',
+          email: newCleaner.email || '',
+          lineUserId: newCleaner.lineUserId || '',
+          specialties: [],
+          role: 'cleaner'
+        };
+        const response = await fetch('https://us-central1-property-manager-cf570.cloudfunctions.net/createCleaner', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cleanerData)
+        });
+        ok = response.ok;
+        if (ok) await loadCleaners();
+      }
 
-      if (response.ok) {
+      if (ok) {
         alert('Cleaner added successfully!');
         setNewCleaner({
           name: '',
@@ -69,7 +94,6 @@ export const CleanerManagement = () => {
           lineUserId: '',
           role: 'cleaner'
         });
-        loadCleaners(); // Refresh the list
       } else {
         alert('Error adding cleaner');
       }
@@ -103,15 +127,20 @@ export const CleanerManagement = () => {
     };
 
     try {
-      const response = await fetch(`https://us-central1-property-manager-cf570.cloudfunctions.net/updateCleaner/${editingCleaner.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(cleanerData)
-      });
+      let ok = false;
+      if ((editingCleaner.role || 'cleaner') === 'admin') {
+        const resp = await fetch(`https://us-central1-property-manager-cf570.cloudfunctions.net/updateAdmin/${editingCleaner.id}`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: editForm.name, email: editForm.email, lineUserId: editForm.lineUserId, phone: editForm.phone })
+        });
+        ok = resp.ok; if (ok) await loadAdmins();
+      } else {
+        const response = await fetch(`https://us-central1-property-manager-cf570.cloudfunctions.net/updateCleaner/${editingCleaner.id}`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cleanerData)
+        });
+        ok = response.ok; if (ok) await loadCleaners();
+      }
 
-      if (response.ok) {
+      if (ok) {
         alert('Cleaner updated successfully!');
         setEditingCleaner(null);
         setEditForm({
@@ -123,7 +152,6 @@ export const CleanerManagement = () => {
           lineUserId: '',
           role: 'cleaner'
         });
-        loadCleaners(); // Refresh the list
       } else {
         alert('Error updating cleaner');
       }
@@ -133,28 +161,26 @@ export const CleanerManagement = () => {
     }
   };
 
-  const handleDelete = async (cleanerId: string) => {
+  const handleDelete = async (cleanerId: string, type: 'cleaner' | 'admin' = 'cleaner') => {
     if (!confirm('Are you sure you want to delete this cleaner? This action cannot be undone.')) {
       return;
     }
 
     try {
-      const response = await fetch(`https://us-central1-property-manager-cf570.cloudfunctions.net/deleteCleaner/${cleanerId}`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        }
-      });
+      const url = type === 'admin' 
+        ? `https://us-central1-property-manager-cf570.cloudfunctions.net/deleteAdmin/${cleanerId}`
+        : `https://us-central1-property-manager-cf570.cloudfunctions.net/deleteCleaner/${cleanerId}`;
+      const response = await fetch(url, { method: 'DELETE', headers: { 'Content-Type': 'application/json' } });
 
       if (response.ok) {
         alert('Cleaner deleted successfully!');
         setEditingCleaner(null);
-        loadCleaners(); // Refresh the list
+        if (type === 'admin') await loadAdmins(); else await loadCleaners();
       } else if (response.status === 404) {
         // Cleaner not found - remove from local state and refresh
         alert('Cleaner not found - it may have already been deleted. Refreshing list...');
         setEditingCleaner(null);
-        loadCleaners(); // Refresh the list
+        if (type === 'admin') await loadAdmins(); else await loadCleaners();
       } else {
         const errorData = await response.json();
         alert(`Error deleting cleaner: ${errorData.error || 'Unknown error'}`);
@@ -234,14 +260,15 @@ export const CleanerManagement = () => {
                 />
               </div>
               <div>
-                <Label htmlFor="flatRate">Flat Rate (JPY) *</Label>
+                <Label htmlFor="flatRate">Flat Rate (JPY) {newCleaner.role === 'cleaner' ? '*' : ''}</Label>
                 <Input
                   id="flatRate"
                   type="number"
                   value={newCleaner.flatRate}
                   onChange={(e) => setNewCleaner({...newCleaner, flatRate: e.target.value})}
                   placeholder="Enter hourly rate"
-                  required
+                  disabled={newCleaner.role === 'admin'}
+                  required={newCleaner.role === 'cleaner'}
                 />
               </div>
               <div>
@@ -446,14 +473,14 @@ export const CleanerManagement = () => {
 
             <Card>
               <CardHeader>
-                <CardTitle>Admins ({adminList.length})</CardTitle>
+                <CardTitle>Admins ({admins.length})</CardTitle>
               </CardHeader>
               <CardContent>
-                {adminList.length === 0 ? (
+                {admins.length === 0 ? (
                   <div className="text-sm text-muted-foreground">No admins added.</div>
                 ) : (
                   <div className="space-y-4">
-                    {adminList.map((admin: any) => (
+                    {admins.map((admin: any) => (
                       <div key={admin.id} className="border rounded-lg p-4">
                         <div className="flex justify-between items-start">
                           <div className="flex-1">
@@ -462,64 +489,64 @@ export const CleanerManagement = () => {
                               <Badge variant="outline" className="text-xs">Admin</Badge>
                               <div className="flex gap-1">
                                 <Dialog>
-                                 <DialogTrigger asChild>
-                                   <Button variant="ghost" size="sm" onClick={() => handleEdit(admin)} className="h-6 w-6 p-0" title="Edit admin">
-                                     <Edit className="h-3 w-3" />
-                                   </Button>
-                                 </DialogTrigger>
-                                 <DialogContent className="max-w-md">
-                                   <DialogHeader>
-                                     <DialogTitle>Edit Admin</DialogTitle>
-                                   </DialogHeader>
-                                   <form onSubmit={handleEditSubmit} className="space-y-4">
-                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                       <div>
-                                         <Label htmlFor="edit-name-admin">Name</Label>
-                                         <Input id="edit-name-admin" value={editForm.name} onChange={(e) => setEditForm({...editForm, name: e.target.value})} required />
-                                       </div>
-                                       <div>
-                                         <Label htmlFor="edit-phone-admin">Phone</Label>
-                                         <Input id="edit-phone-admin" value={editForm.phone} onChange={(e) => setEditForm({...editForm, phone: e.target.value})} />
-                                       </div>
-                                       <div>
-                                         <Label htmlFor="edit-email-admin">Email</Label>
-                                         <Input id="edit-email-admin" type="email" value={editForm.email} onChange={(e) => setEditForm({...editForm, email: e.target.value})} />
-                                       </div>
-                                       <div className="md:col-span-2">
-                                         <Label htmlFor="edit-lineUserId-admin">LINE User ID</Label>
-                                         <Input id="edit-lineUserId-admin" value={editForm.lineUserId} onChange={(e) => setEditForm({...editForm, lineUserId: e.target.value})} placeholder="U1234567890abcdef" />
-                                       </div>
-                                       <div className="md:col-span-2">
-                                         <Label htmlFor="edit-role-admin">Role</Label>
-                                         <Select value={editForm.role} onValueChange={(v) => setEditForm({...editForm, role: v as any})}>
-                                           <SelectTrigger id="edit-role-admin">
-                                             <SelectValue placeholder="Select role" />
-                                           </SelectTrigger>
-                                           <SelectContent>
-                                             <SelectItem value="cleaner">Cleaner</SelectItem>
-                                             <SelectItem value="admin">Admin</SelectItem>
-                                           </SelectContent>
-                                         </Select>
-                                       </div>
-                                     </div>
-                                     <div className="flex justify-between items-center pt-4 border-t">
-                                       <Button type="button" variant="destructive" size="sm" onClick={() => handleDelete(admin.id)} className="flex items-center gap-1">
-                                         <Trash2 className="h-3 w-3" />
-                                         Delete Admin
-                                       </Button>
-                                       <div className="flex gap-2">
-                                         <Button type="button" variant="outline" onClick={() => setEditingCleaner(null)}>Cancel</Button>
-                                         <Button type="submit">Update</Button>
-                                       </div>
-                                     </div>
-                                   </form>
-                                 </DialogContent>
-                               </Dialog>
-                               </div>
-                               <div className="space-y-1">
-                                 {admin.email && <p className="text-sm text-gray-600">{admin.email}</p>}
-                                 {admin.phone && <p className="text-sm text-gray-600">{admin.phone}</p>}
-                               </div>
+                                  <DialogTrigger asChild>
+                                    <Button variant="ghost" size="sm" onClick={() => handleEdit(admin)} className="h-6 w-6 p-0" title="Edit admin">
+                                      <Edit className="h-3 w-3" />
+                                    </Button>
+                                  </DialogTrigger>
+                                  <DialogContent className="max-w-md">
+                                    <DialogHeader>
+                                      <DialogTitle>Edit Admin</DialogTitle>
+                                    </DialogHeader>
+                                    <form onSubmit={handleEditSubmit} className="space-y-4">
+                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                          <Label htmlFor="edit-name-admin">Name</Label>
+                                          <Input id="edit-name-admin" value={editForm.name} onChange={(e) => setEditForm({...editForm, name: e.target.value})} required />
+                                        </div>
+                                        <div>
+                                          <Label htmlFor="edit-phone-admin">Phone</Label>
+                                          <Input id="edit-phone-admin" value={editForm.phone} onChange={(e) => setEditForm({...editForm, phone: e.target.value})} />
+                                        </div>
+                                        <div>
+                                          <Label htmlFor="edit-email-admin">Email</Label>
+                                          <Input id="edit-email-admin" type="email" value={editForm.email} onChange={(e) => setEditForm({...editForm, email: e.target.value})} />
+                                        </div>
+                                        <div className="md:col-span-2">
+                                          <Label htmlFor="edit-lineUserId-admin">LINE User ID</Label>
+                                          <Input id="edit-lineUserId-admin" value={editForm.lineUserId} onChange={(e) => setEditForm({...editForm, lineUserId: e.target.value})} placeholder="U1234567890abcdef" />
+                                        </div>
+                                        <div className="md:col-span-2">
+                                          <Label htmlFor="edit-role-admin">Role</Label>
+                                          <Select value={editForm.role} onValueChange={(v) => setEditForm({...editForm, role: v as any})}>
+                                            <SelectTrigger id="edit-role-admin">
+                                              <SelectValue placeholder="Select role" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                              <SelectItem value="cleaner">Cleaner</SelectItem>
+                                              <SelectItem value="admin">Admin</SelectItem>
+                                            </SelectContent>
+                                          </Select>
+                                        </div>
+                                      </div>
+                                      <div className="flex justify-between items-center pt-4 border-t">
+                                        <Button type="button" variant="destructive" size="sm" onClick={() => handleDelete(admin.id, 'admin')} className="flex items-center gap-1">
+                                          <Trash2 className="h-3 w-3" />
+                                          Delete Admin
+                                        </Button>
+                                        <div className="flex gap-2">
+                                          <Button type="button" variant="outline" onClick={() => setEditingCleaner(null)}>Cancel</Button>
+                                          <Button type="submit">Update</Button>
+                                        </div>
+                                      </div>
+                                    </form>
+                                  </DialogContent>
+                                </Dialog>
+                              </div>
+                              <div className="space-y-1">
+                                {admin.email && <p className="text-sm text-gray-600">{admin.email}</p>}
+                                {admin.phone && <p className="text-sm text-gray-600">{admin.phone}</p>}
+                              </div>
                             </div>
                           </div>
                         </div>

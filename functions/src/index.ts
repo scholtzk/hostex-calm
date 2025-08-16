@@ -33,3 +33,4 @@ export const bookings = onRequest({ cors: true }, (request, response) => {
 export * from './line-notifications';
 export * from './cleaners';
 export * from './cleaning-assignments';
+export * from './admins';
