@@ -10,7 +10,7 @@ export const useBookings = () => {
     try {
       setLoading(true);
       console.log('Loading bookings from Firebase Cloud Function...');
-      const response = await fetch('https://us-central1-property-manager-cf570.cloudfunctions.net/bookings');
+      const response = await fetch('https://us-central1-property-manager-cf570.cloudfunctions.net/bookings?limit=100');
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -24,23 +24,34 @@ export const useBookings = () => {
         throw new Error('Invalid API response format: missing reservations array');
       }
       
-      // Transform the API data to our Booking interface
-      const transformedBookings: Booking[] = data.reservations.map((reservation: any) => ({
-        id: reservation.reservation_code || Math.random().toString(36).substr(2, 9),
-        guestName: reservation.guest_name || 'Unknown Guest',
-        checkIn: reservation.check_in_date,
-        checkOut: reservation.check_out_date,
-        guests: reservation.number_of_guests || 1,
-        source: reservation.custom_channel?.name || reservation.channel_type || 'Direct',
-        status: reservation.status === 'accepted' ? 'confirmed' : reservation.status,
-        cleaningRequired: true, // Assume cleaning is always required for property bookings
-        cleaningStatus: 'pending',
-        price: reservation.rates?.rate?.amount,
-        currency: reservation.rates?.rate?.currency || 'JPY',
-        phone: reservation.guest_phone,
-        email: reservation.guest_email,
-        notes: reservation.remarks || reservation.channel_remarks
-      }));
+      // Transform the API data to our Booking interface and filter out cancelled bookings and bookings without guest names
+      // Also remove duplicates based on reservation_code
+      const uniqueReservations = data.reservations.filter((reservation: any, index: number, self: any[]) => 
+        index === self.findIndex((r: any) => r.reservation_code === reservation.reservation_code)
+      );
+
+      const transformedBookings: Booking[] = uniqueReservations
+        .filter((reservation: any) => 
+          reservation.status !== 'cancelled'
+        )
+        .map((reservation: any) => ({
+          id: reservation.reservation_code || Math.random().toString(36).substr(2, 9),
+          guestName: reservation.guest_name && reservation.guest_name.trim() !== '' 
+            ? reservation.guest_name 
+            : `Guest (${reservation.reservation_code?.slice(-8) || 'Unknown'})`,
+          checkIn: reservation.check_in_date,
+          checkOut: reservation.check_out_date,
+          guests: reservation.number_of_guests || 1,
+          source: reservation.custom_channel?.name || reservation.channel_type || 'Direct',
+          status: reservation.status === 'accepted' ? 'confirmed' : reservation.status,
+          cleaningRequired: true, // Assume cleaning is always required for property bookings
+          cleaningStatus: 'pending',
+          price: reservation.rates?.rate?.amount,
+          currency: reservation.rates?.rate?.currency || 'JPY',
+          phone: reservation.guest_phone,
+          email: reservation.guest_email,
+          notes: reservation.remarks || reservation.channel_remarks
+        }));
       
       setBookings(transformedBookings);
       setError(null);
@@ -54,6 +65,14 @@ export const useBookings = () => {
 
   useEffect(() => {
     loadBookings();
+    
+    // Auto-refresh every 5 minutes
+    const interval = setInterval(() => {
+      console.log('Auto-refreshing bookings...');
+      loadBookings();
+    }, 5 * 60 * 1000); // 5 minutes
+    
+    return () => clearInterval(interval);
   }, []);
 
   return { bookings, loading, error, refetch: loadBookings };

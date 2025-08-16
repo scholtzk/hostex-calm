@@ -1,73 +1,151 @@
-# Welcome to your Lovable project
+# Property Booking Manager
 
-## Project info
+A comprehensive property management system with booking calendar, cleaner management, and availability tracking.
 
-**URL**: https://lovable.dev/projects/385e62f0-91b5-493f-9cb7-ace1f7de12e1
+## Features
 
-## How can I edit this code?
+### 📅 Booking Calendar
+- View and manage property bookings
+- Drag-and-drop cleaning assignments
+- Visual calendar interface
+- Booking status tracking
 
-There are several ways of editing your application.
+### 👥 Cleaner Management
+- Add, edit, and manage cleaners
+- Track cleaner assignments
+- Monitor cleaning status
+- Cleaner performance metrics
 
-**Use Lovable**
+### 📱 Cleaner Availability Calendar (NEW!)
+- **Mobile-optimized calendar** for cleaners to input availability
+- **Unique links** for each cleaner to access their personal calendar
+- **Admin interface** to create and manage availability links
+- **Simple date selection** - tap to highlight/unhighlight availability
+- **Month navigation** for future planning
+- **Visual feedback** with green highlights and checkmarks
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/385e62f0-91b5-493f-9cb7-ace1f7de12e1) and start prompting.
+## Quick Start
 
-Changes made via Lovable will be committed automatically to this repo.
+### For Admins
+1. Navigate to the **Availability** tab in the main interface
+2. Select a month and choose cleaners
+3. Create availability links
+4. Copy and share the unique links with cleaners
 
-**Use your preferred IDE**
+### For Cleaners
+1. Click the unique link sent by admin
+2. View the month's calendar
+3. Tap days to mark as available/unavailable
+4. Click "Confirm Availability" to save
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+## Development
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+### Prerequisites
+- Node.js 20+
+- Firebase project setup
+- Git
 
-Follow these steps:
+### Installation
+```bash
+# Clone the repository
+git clone <repository-url>
+cd hostex-calm
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+# Install dependencies
+npm install
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Start development server
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+### Testing the Availability Feature
+Visit `/test-availability` to test the calendar interface with mock data.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+### Firebase Functions
+The availability functions are deployed to Firebase Functions:
+- `getCleanerAvailability`
+- `updateCleanerAvailability`
+- `createAvailabilityLinks`
+- `getAvailabilityLink`
+- `getAllAvailabilityLinks`
 
-**Use GitHub Codespaces**
+## Project Structure
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+```
+src/
+├── components/
+│   ├── AvailabilityCalendar.tsx    # Mobile calendar for cleaners
+│   ├── AvailabilityManagement.tsx  # Admin interface for managing links
+│   ├── BookingCalendar.tsx         # Main booking calendar
+│   └── CleanerManagement.tsx      # Cleaner management interface
+├── hooks/
+│   ├── useAvailability.ts          # Availability data management
+│   ├── useCleaners.ts             # Cleaner data management
+│   └── useBookings.ts             # Booking data management
+├── pages/
+│   ├── Index.tsx                  # Main application
+│   └── AvailabilityTest.tsx       # Test page for availability
+└── types/
+    └── booking.ts                 # TypeScript type definitions
+```
 
-## What technologies are used for this project?
+## Mobile Optimization
 
-This project is built with:
+The availability calendar is specifically designed for mobile devices:
+- Large touch targets for easy tapping
+- Responsive grid layout
+- Clear visual feedback
+- Optimized for thumb navigation
+- Full-screen calendar view
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## Database Schema
 
-## How can I deploy this project?
+### Cleaner Availability
+```typescript
+{
+  id: string;
+  cleanerId: string;
+  month: string; // Format: "2025-03"
+  availableDates: string[]; // Format: ["2025-03-21", "2025-03-22"]
+  createdAt: string;
+  updatedAt: string;
+}
+```
 
-Simply open [Lovable](https://lovable.dev/projects/385e62f0-91b5-493f-9cb7-ace1f7de12e1) and click on Share -> Publish.
+### Availability Links
+```typescript
+{
+  id: string;
+  cleanerId: string;
+  cleanerName: string;
+  month: string; // Format: "2025-03"
+  uniqueLink: string; // UUID for the link
+  isActive: boolean;
+  createdAt: string;
+  expiresAt?: string; // Optional expiration
+}
+```
 
-## Can I connect a custom domain to my Lovable project?
+## Deployment
 
-Yes, you can!
+### GitHub Pages
+The application is designed to be hosted on GitHub Pages. The availability links will work with the deployed URL structure.
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+### Firebase Functions
+Deploy the functions to Firebase:
+```bash
+cd functions
+firebase deploy --only functions
+```
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
+
+## License
+
+This project is licensed under the MIT License.

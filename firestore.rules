@@ -1,0 +1,34 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow access to cleaners collection
+    match /cleaners/{cleanerId} {
+      allow read: if true; // Anyone can read cleaner data
+      allow write: if true; // Anyone can write cleaner data (you may want to restrict this)
+    }
+    
+    // Allow access to cleaning assignments collection
+    match /cleaning-assignments/{assignmentId} {
+      allow read: if true; // Anyone can read assignment data
+      allow write: if true; // Anyone can write assignment data (you may want to restrict this)
+    }
+
+    // Allow access to cleaner availability collection (development only)
+    match /cleaner_availability/{docId} {
+      allow read: if true;  // Anyone can read availability
+      allow write: if true; // Anyone can write availability (adjust for production)
+    }
+    
+    // Allow access to cleaner availability links collection (development only)
+    match /cleaner_availability_links/{linkId} {
+      allow read: if true;  // Anyone can read links
+      allow write: if true; // Anyone can create/update links (adjust for production)
+    }
+    
+    // Default rule - deny all other access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
