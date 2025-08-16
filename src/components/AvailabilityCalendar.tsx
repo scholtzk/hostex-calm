@@ -322,7 +322,7 @@ export const AvailabilityCalendar: React.FC<AvailabilityCalendarProps> = ({
           <CardContent className="p-4">
             {/* Day Headers */}
             <div className="grid grid-cols-7 gap-1 mb-2">
-              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+              {['日', '月', '火', '水', '木', '金', '土'].map(day => (
                 <div key={day} className="text-center text-sm font-medium text-muted-foreground py-2">
                   {day}
                 </div>
