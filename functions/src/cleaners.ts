@@ -9,7 +9,7 @@ if (!admin.apps.length) {
 const db = admin.firestore();
 
 // GET /cleaners - Get all active cleaners
-export const getCleaners = onRequest({ cors: true }, async (req, res) => {
+export const getCleaners = onRequest({ cors: true, minInstances: 0 }, async (req, res) => {
   try {
     if (req.method !== 'GET') { res.status(405).send('Method Not Allowed'); return; }
 
@@ -27,7 +27,7 @@ export const getCleaners = onRequest({ cors: true }, async (req, res) => {
 });
 
 // POST /cleaners - Create a new cleaner/admin
-export const createCleaner = onRequest({ cors: true }, async (req, res) => {
+export const createCleaner = onRequest({ cors: true, minInstances: 0 }, async (req, res) => {
   try {
     if (req.method !== 'POST') { res.status(405).send('Method Not Allowed'); return; }
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -24,9 +24,8 @@ export const CleanerManagement = () => {
     }
   };
   
-  // Load admins on mount
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useState(() => { loadAdmins(); });
+  // Load admins on mount (useEffect to avoid re-invocations)
+  useEffect(() => { loadAdmins(); }, []);
   const [newCleaner, setNewCleaner] = useState({
     name: '',
     flatRate: '',
@@ -206,15 +205,11 @@ export const CleanerManagement = () => {
       const startDate = new Date(parseInt(year), parseInt(month) - 1, 1);
       const endDate = new Date(parseInt(year), parseInt(month), 0);
 
-      const response = await fetch('https://us-central1-property-manager-cf570.cloudfunctions.net/getCleaningAssignments');
+      const startStr = startDate.toISOString().split('T')[0];
+      const endStr = endDate.toISOString().split('T')[0];
+      const response = await fetch(`https://us-central1-property-manager-cf570.cloudfunctions.net/getCleaningAssignments?startDate=${startStr}&endDate=${endStr}`);
       const data = await response.json();
-      
-      const assignments = data.assignments.filter((assignment: any) => {
-        const assignmentDate = new Date(assignment.date);
-        return assignment.cleanerId === workHistoryCleaner.id &&
-               assignmentDate >= startDate &&
-               assignmentDate <= endDate;
-      });
+      const assignments = (data.assignments || []).filter((assignment: any) => assignment.cleanerId === workHistoryCleaner.id);
 
       setWorkHistory(assignments);
     } catch (error) {

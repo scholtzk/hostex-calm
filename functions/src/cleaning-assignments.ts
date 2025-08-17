@@ -8,16 +8,27 @@ if (!admin.apps.length) {
 const db = admin.firestore();
 
 // GET /cleaning-assignments - Get all cleaning assignments
-export const getCleaningAssignments = onRequest({ cors: true }, async (req, res) => {
+export const getCleaningAssignments = onRequest({ cors: true, minInstances: 0 }, async (req, res) => {
   try {
     if (req.method !== 'GET') { res.status(405).send('Method Not Allowed'); return; }
 
-    const { date } = req.query as any;
+    const { date, startDate, endDate } = req.query as any;
     let query: admin.firestore.Query = db.collection('cleaning-assignments');
-    if (date) { query = query.where('currentCleaningDate', '==', date); }
+
+    if (date) {
+      query = query.where('currentCleaningDate', '==', date);
+    } else if (startDate && endDate) {
+      query = query
+        .where('currentCleaningDate', '>=', startDate)
+        .where('currentCleaningDate', '<=', endDate);
+    } else {
+      res.status(400).json({ error: 'date or startDate+endDate is required' });
+      return;
+    }
 
     const assignmentsSnapshot = await query.get();
     const assignments = assignmentsSnapshot.docs.map(doc => ({ date: doc.data().currentCleaningDate, id: doc.id, ...doc.data() }));
+    res.set('Cache-Control', 'public, max-age=60');
     res.status(200).json({ assignments });
   } catch (error) {
     console.error('Error fetching cleaning assignments:', error);
@@ -26,7 +37,7 @@ export const getCleaningAssignments = onRequest({ cors: true }, async (req, res)
 });
 
 // POST /cleaning-assignments - Create or update a cleaning assignment
-export const createOrUpdateCleaningAssignment = onRequest({ cors: true }, async (req, res) => {
+export const createOrUpdateCleaningAssignment = onRequest({ cors: true, minInstances: 0 }, async (req, res) => {
   try {
     if (req.method !== 'POST') { res.status(405).send('Method Not Allowed'); return; }
 
@@ -44,21 +55,30 @@ export const createOrUpdateCleaningAssignment = onRequest({ cors: true }, async 
 });
 
 // PATCH /cleaning-assignments/:date - Update cleaner assignment
-export const updateCleanerAssignment = onRequest({ cors: true }, async (req, res) => {
+export const updateCleanerAssignment = onRequest({ cors: true, minInstances: 0 }, async (req, res) => {
   try {
     if (req.method !== 'PATCH') { res.status(405).send('Method Not Allowed'); return; }
 
     const date = req.params[0];
     const { cleanerId, cleanerName, bookingId } = req.body;
-    if (!bookingId) { res.status(400).json({ error: 'bookingId is required' }); return; }
 
-    const candidates = await db.collection('cleaning-assignments').where('bookingId', '==', bookingId).get();
-    if (candidates.empty) { res.status(404).json({ error: 'Cleaning assignment not found for booking' }); return; }
+    let targetDocId: string | null = null;
 
-    const matchingDoc = candidates.docs.find(doc => { const d = doc.data() as any; return d.currentCleaningDate === date || d.originalBookingDate === date; });
-    if (!matchingDoc) { res.status(404).json({ error: 'Cleaning assignment not found for given date and booking' }); return; }
+    if (bookingId) {
+      const candidates = await db.collection('cleaning-assignments').where('bookingId', '==', bookingId).get();
+      if (candidates.empty) { res.status(404).json({ error: 'Cleaning assignment not found for booking' }); return; }
+      const matchingDoc = candidates.docs.find(doc => { const d = doc.data() as any; return d.currentCleaningDate === date || d.originalBookingDate === date; });
+      if (!matchingDoc) { res.status(404).json({ error: 'Cleaning assignment not found for given date and booking' }); return; }
+      targetDocId = matchingDoc.id;
+    } else {
+      // Fallback: find by date only
+      const byDateSnap = await db.collection('cleaning-assignments').where('currentCleaningDate', '==', date).get();
+      if (byDateSnap.empty) { res.status(404).json({ error: 'Cleaning assignment not found for date' }); return; }
+      if (byDateSnap.size > 1) { res.status(400).json({ error: 'Multiple assignments on this date; bookingId required' }); return; }
+      targetDocId = byDateSnap.docs[0].id;
+    }
 
-    await db.collection('cleaning-assignments').doc(matchingDoc.id).update({ cleanerId, cleanerName, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+    await db.collection('cleaning-assignments').doc(targetDocId).update({ cleanerId, cleanerName, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
     res.status(200).json({ message: 'Cleaner assignment updated successfully' });
   } catch (error) {
     console.error('Error updating cleaner assignment:', error);
@@ -67,7 +87,7 @@ export const updateCleanerAssignment = onRequest({ cors: true }, async (req, res
 });
 
 // DELETE /cleaning-assignments/:date - Delete a cleaning assignment
-export const deleteCleaningAssignment = onRequest({ cors: true }, async (req, res) => {
+export const deleteCleaningAssignment = onRequest({ cors: true, minInstances: 0 }, async (req, res) => {
   try {
     if (req.method !== 'DELETE') { res.status(405).send('Method Not Allowed'); return; }
     const date = req.params[0];
@@ -82,7 +102,7 @@ export const deleteCleaningAssignment = onRequest({ cors: true }, async (req, re
 });
 
 // POST /cleaning-assignments/sync - Sync cleaning assignments from bookings
-export const syncCleaningAssignments = onRequest({ cors: true }, async (req, res) => {
+export const syncCleaningAssignments = onRequest({ cors: true, minInstances: 0 }, async (req, res) => {
   try {
     if (req.method !== 'POST') { res.status(405).send('Method Not Allowed'); return; }
 
@@ -90,20 +110,41 @@ export const syncCleaningAssignments = onRequest({ cors: true }, async (req, res
     if (!bookings || !Array.isArray(bookings)) { res.status(400).json({ error: 'bookings array is required' }); return; }
 
     const batch = db.batch();
-    const existingAssignments = new Map();
-    const existingSnapshot = await db.collection('cleaning-assignments').get();
-    existingSnapshot.docs.forEach(doc => { existingAssignments.set(doc.id, doc.data()); });
+    // Instead of scanning the whole collection, check existence by expected IDs only
+    const chunkSize = 500; // Firestore limits for batched gets
+    const toCreate: Array<{ id: string; data: any }> = [];
 
-    for (const booking of bookings) {
-      if (booking.cleaningRequired) {
-        const originalBookingDate = booking.checkOut;
-        const assignmentData = { originalBookingDate, currentCleaningDate: originalBookingDate, bookingId: booking.id, guestName: booking.guestName, cleanerId: null, cleanerName: null, bookingDateChanged: false, updatedAt: admin.firestore.FieldValue.serverTimestamp() };
-        const docId = `${originalBookingDate}_${booking.id}`; const existingAssignment = existingAssignments.get(docId);
-        if (!existingAssignment || existingAssignment.bookingId !== booking.id) { batch.set(db.collection('cleaning-assignments').doc(docId), assignmentData); }
-      }
+    const expected = bookings
+      .filter((b: any) => b && b.cleaningRequired && b.checkOut && b.id)
+      .map((b: any) => ({ id: `${b.checkOut}_${b.id}`, data: {
+        originalBookingDate: b.checkOut,
+        currentCleaningDate: b.checkOut,
+        bookingId: b.id,
+        guestName: b.guestName,
+        cleanerId: null,
+        cleanerName: null,
+        bookingDateChanged: false,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }}));
+
+    for (let i = 0; i < expected.length; i += chunkSize) {
+      const slice = expected.slice(i, i + chunkSize);
+      const refs = slice.map(e => db.collection('cleaning-assignments').doc(e.id));
+      const snaps = await db.getAll(...refs);
+      snaps.forEach((snap, idx) => {
+        if (!snap.exists) {
+          toCreate.push(slice[idx]);
+        }
+      });
     }
 
-    await batch.commit();
+    toCreate.forEach(item => {
+      batch.set(db.collection('cleaning-assignments').doc(item.id), item.data);
+    });
+
+    if (toCreate.length > 0) {
+      await batch.commit();
+    }
     res.status(200).json({ message: 'Cleaning assignments synced successfully' });
   } catch (error) {
     console.error('Error syncing cleaning assignments:', error);
@@ -111,7 +152,7 @@ export const syncCleaningAssignments = onRequest({ cors: true }, async (req, res
   }
 });
 
-export const syncAllCleaningAssignments = onRequest({ cors: true }, async (req, res) => {
+export const syncAllCleaningAssignments = onRequest({ cors: true, minInstances: 0 }, async (req, res) => {
   try {
     if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
 

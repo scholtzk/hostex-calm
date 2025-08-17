@@ -13,11 +13,14 @@ import { AvailabilityCalendar } from './AvailabilityCalendar';
 
 export const AvailabilityManagement: React.FC = () => {
   const { cleaners, loading: cleanersLoading } = useCleaners();
-  const { availabilityLinks, getAllAvailabilityLinks, createAvailabilityLinks, loading } = useAvailability();
+  const { availabilityLinks, getAllAvailabilityLinks, getAvailabilityLinksPage, createAvailabilityLinks, loading } = useAvailability();
   
   const [selectedCleaners, setSelectedCleaners] = useState<string[]>([]);
   const [selectedMonth, setSelectedMonth] = useState<string>('');
   const [creatingLinks, setCreatingLinks] = useState(false);
+  const [activeCleanerId, setActiveCleanerId] = useState<string>('');
+  const [linksMonthFilter, setLinksMonthFilter] = useState<string>('');
+  const [linksCursor, setLinksCursor] = useState<string | null>(null);
 
   // Get current month and next few months
   const getAvailableMonths = () => {
@@ -172,6 +175,19 @@ export const AvailabilityManagement: React.FC = () => {
     getAllAvailabilityLinks();
   }, []);
 
+  const loadMoreLinks = async () => {
+    const { nextCursor, links } = await getAvailabilityLinksPage({ month: linksMonthFilter || undefined, cursor: linksCursor || undefined, limit: 50 });
+    // Append handled inside hook caller; we just update cursor
+    setLinksCursor(nextCursor || null);
+  };
+
+  // Initialize active tab once cleaners are loaded
+  useEffect(() => {
+    if (!activeCleanerId && cleaners.length > 0) {
+      setActiveCleanerId(cleaners[0].id);
+    }
+  }, [cleaners, activeCleanerId]);
+
   const availableMonths = getAvailableMonths();
 
   return (
@@ -287,6 +303,19 @@ export const AvailabilityManagement: React.FC = () => {
           </CardTitle>
         </CardHeader>
         <CardContent>
+          {/* Links filter and pagination controls */}
+          <div className="mb-4 flex items-center gap-2">
+            <Select value={linksMonthFilter} onValueChange={(v)=>{ setLinksMonthFilter(v); setLinksCursor(null); getAvailabilityLinksPage({ month: v, limit: 50 }).then(({ nextCursor, links })=> setLinksCursor(nextCursor || null)); }}>
+              <SelectTrigger className="w-[200px]"><SelectValue placeholder="Filter links by month"/></SelectTrigger>
+              <SelectContent>
+                {getAvailableMonths().map(m => (
+                  <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button variant="outline" size="sm" onClick={() => { setLinksMonthFilter(''); setLinksCursor(null); getAllAvailabilityLinks(); }}>Clear Filter</Button>
+            <Button variant="outline" size="sm" onClick={loadMoreLinks} disabled={loading || !availabilityLinks?.length}>Load more</Button>
+          </div>
           {cleanersLoading ? (
             <div className="flex items-center justify-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -297,7 +326,7 @@ export const AvailabilityManagement: React.FC = () => {
               <p>No cleaners found.</p>
             </div>
           ) : (
-            <Tabs defaultValue={cleaners[0]?.id ?? ''} className="w-full">
+            <Tabs value={activeCleanerId} onValueChange={setActiveCleanerId} className="w-full">
               <TabsList className="flex overflow-x-auto">
                 {cleaners.map((cleaner) => (
                   <TabsTrigger key={cleaner.id} value={cleaner.id} className="truncate max-w-[150px]">
@@ -306,8 +335,9 @@ export const AvailabilityManagement: React.FC = () => {
                 ))}
               </TabsList>
 
-              {cleaners.map((cleaner) => (
-                <TabsContent key={cleaner.id} value={cleaner.id} className="mt-4">
+              {/* Only mount the active cleaner's calendar */}
+              {activeCleanerId && (
+                <TabsContent value={activeCleanerId} className="mt-4">
                   <div className="flex items-center justify-between mb-2">
                     <div className="text-sm text-muted-foreground">Generate stable link for:</div>
                     <div className="flex items-center gap-2">
@@ -326,16 +356,16 @@ export const AvailabilityManagement: React.FC = () => {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => copyStableLink(cleaner.id, selectedMonth)}
+                        onClick={() => copyStableLink(activeCleanerId, selectedMonth)}
                         disabled={!selectedMonth}
                       >
                         <Copy className="w-4 h-4 mr-2" /> Copy stable link
                       </Button>
                     </div>
                   </div>
-                  <AvailabilityCalendar cleanerId={cleaner.id} cleanerName={cleaner.name} />
+                  <AvailabilityCalendar cleanerId={activeCleanerId} cleanerName={cleaners.find(c => c.id === activeCleanerId)?.name} />
                 </TabsContent>
-              ))}
+              )}
             </Tabs>
           )}
         </CardContent>

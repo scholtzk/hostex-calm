@@ -28,13 +28,26 @@ export const useCleaningAssignments = (): UseCleaningAssignmentsReturn => {
   const [cleaningAssignments, setCleaningAssignments] = useState<CleaningAssignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  let lastFetchAt: number | null = null;
+
+  const getMonthRange = (date: Date) => {
+    const start = new Date(date.getFullYear(), date.getMonth(), 1);
+    const end = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+    const startStr = start.toISOString().split('T')[0];
+    const endStr = end.toISOString().split('T')[0];
+    return { startStr, endStr };
+  };
 
   const fetchAssignments = async () => {
     try {
+      // basic throttle: skip if refetched within 5s
+      if (lastFetchAt && Date.now() - lastFetchAt < 5000) return;
+      lastFetchAt = Date.now();
       setLoading(true);
       setError(null);
       
-      const response = await fetch('https://getcleaningassignments-463sryhoiq-uc.a.run.app');
+      const { startStr, endStr } = getMonthRange(new Date());
+      const response = await fetch(`https://us-central1-property-manager-cf570.cloudfunctions.net/getCleaningAssignments?startDate=${startStr}&endDate=${endStr}`);
       
       if (!response.ok) {
         throw new Error('Failed to fetch cleaning assignments');

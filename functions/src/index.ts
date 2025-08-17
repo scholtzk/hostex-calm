@@ -8,7 +8,7 @@ const corsHandler = cors({
   credentials: true,
 });
 
-export const bookings = onRequest({ cors: true }, (request, response) => {
+export const bookings = onRequest({ cors: true, minInstances: 0 }, (request, response) => {
   corsHandler(request, response, () => {
     // Handle CORS preflight request
     if (request.method === 'OPTIONS') {
@@ -29,8 +29,14 @@ export const bookings = onRequest({ cors: true }, (request, response) => {
   });
 });
 
+// Lightweight health endpoint with no Firestore access
+export const health = onRequest({ cors: true, minInstances: 0 }, (_req, res) => {
+  res.status(200).send('ok');
+});
+
 // Export additional HTTPS functions (v2)
 export * from './line-notifications';
 export * from './cleaners';
 export * from './cleaning-assignments';
 export * from './admins';
+export * from './availability';

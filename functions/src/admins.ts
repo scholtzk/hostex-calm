@@ -8,7 +8,7 @@ if (!admin.apps.length) {
 const db = admin.firestore();
 
 // GET /admins - list active admins
-export const getAdmins = onRequest({ cors: true }, async (req, res) => {
+export const getAdmins = onRequest({ cors: true, minInstances: 0 }, async (req, res) => {
   try {
     if (req.method !== 'GET') { res.status(405).send('Method Not Allowed'); return; }
     const snap = await db.collection('admins').where('isActive', '==', true).get();
@@ -22,7 +22,7 @@ export const getAdmins = onRequest({ cors: true }, async (req, res) => {
 });
 
 // POST /admins - create admin
-export const createAdmin = onRequest({ cors: true }, async (req, res) => {
+export const createAdmin = onRequest({ cors: true, minInstances: 0 }, async (req, res) => {
   try {
     if (req.method !== 'POST') { res.status(405).send('Method Not Allowed'); return; }
     const { name, email, lineUserId, phone } = req.body || {};
@@ -37,7 +37,7 @@ export const createAdmin = onRequest({ cors: true }, async (req, res) => {
 });
 
 // PUT /admins/:id - update admin
-export const updateAdmin = onRequest({ cors: true }, async (req, res) => {
+export const updateAdmin = onRequest({ cors: true, minInstances: 0 }, async (req, res) => {
   try {
     if (req.method !== 'PUT') { res.status(405).send('Method Not Allowed'); return; }
     const id = req.params[0];
@@ -53,7 +53,7 @@ export const updateAdmin = onRequest({ cors: true }, async (req, res) => {
 });
 
 // DELETE /admins/:id - soft delete
-export const deleteAdmin = onRequest({ cors: true }, async (req, res) => {
+export const deleteAdmin = onRequest({ cors: true, minInstances: 0 }, async (req, res) => {
   try {
     if (req.method !== 'DELETE') { res.status(405).send('Method Not Allowed'); return; }
     const id = req.params[0];

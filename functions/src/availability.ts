@@ -242,6 +242,7 @@ export const getAvailabilityLink = functions.https.onRequest(async (req, res) =>
     }
 
     const linkData = linkSnapshot.docs[0].data();
+    res.set('Cache-Control', 'public, max-age=300');
     res.status(200).json({
       id: linkSnapshot.docs[0].id,
       ...linkData
@@ -252,7 +253,7 @@ export const getAvailabilityLink = functions.https.onRequest(async (req, res) =>
   }
 });
 
-// GET /availability-links - Get all availability links for admin
+// GET /availability-links - Get all availability links for admin (with optional month filter and pagination)
 export const getAllAvailabilityLinks = functions.https.onRequest(async (req, res) => {
   try {
     res.set('Access-Control-Allow-Origin', '*');
@@ -269,16 +270,30 @@ export const getAllAvailabilityLinks = functions.https.onRequest(async (req, res
       return;
     }
 
-    const linksSnapshot = await db.collection('cleaner_availability_links')
-      .orderBy('createdAt', 'desc')
-      .get();
+    const month = (req.query.month as string) || '';
+    const limit = Math.min(parseInt((req.query.limit as string) || '50', 10) || 50, 200);
+    const cursor = (req.query.cursor as string) || '';
 
-    const links = linksSnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
+    let q: FirebaseFirestore.Query = db.collection('cleaner_availability_links');
+    if (month) {
+      q = q.where('month', '==', month);
+    }
+    q = q.orderBy('createdAt', 'desc').limit(limit);
 
-    res.status(200).json({ links });
+    if (cursor) {
+      // Expect cursor to be a document ID; fetch snap and startAfter
+      const cursorSnap = await db.collection('cleaner_availability_links').doc(cursor).get();
+      if (cursorSnap.exists) {
+        q = (q as FirebaseFirestore.Query<FirebaseFirestore.DocumentData>).startAfter(cursorSnap);
+      }
+    }
+
+    const snap = await q.get();
+    const links = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const nextCursor = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1].id : null;
+
+    res.set('Cache-Control', 'public, max-age=60');
+    res.status(200).json({ links, nextCursor });
   } catch (error) {
     console.error('Error fetching availability links:', error);
     res.status(500).json({ error: 'Failed to fetch availability links' });

@@ -76,6 +76,7 @@ export const BookingCalendar = () => {
   } = useCleaningAssignments();
 
   const [distributing, setDistributing] = useState(false);
+  const [actionInFlight, setActionInFlight] = useState<Promise<any> | null>(null);
 
   const handleSuggestFairDistribution = async () => {
     if (distributing) return;
@@ -132,7 +133,7 @@ export const BookingCalendar = () => {
       });
 
       // Refresh data
-      refetchCleaners();
+      // avoid double-refetch; only refresh assignments
       refetchCleaningAssignments();
     } catch (err) {
       console.error('Fair distribution error', err);
@@ -496,8 +497,7 @@ export const BookingCalendar = () => {
   };
 
   const handleUnassign = () => {
-    // Refresh the data after unassigning
-    refetchCleaners();
+    // Refresh assignments only
     refetchCleaningAssignments();
   };
 
@@ -892,6 +892,16 @@ export const BookingCalendar = () => {
     if (bookings.length === 0) return;
     const year = currentMonth.getFullYear();
     const month = currentMonth.getMonth();
+
+    const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
+    const storageKey = `autoHealRan-${monthKey}`;
+    try {
+      const ranFlag = typeof window !== 'undefined' ? localStorage.getItem(storageKey) : null;
+      if (ranFlag === 'true') {
+        return; // already ran this month in this browser session
+      }
+    } catch {}
+
     const monthStart = new Date(year, month, 1);
     const monthEnd = new Date(year, month + 1, 0);
     const bookingsInMonth = bookings.filter(b => {
@@ -904,8 +914,11 @@ export const BookingCalendar = () => {
     if (missing.length > 0) {
       // Fire-and-forget to create any missing assignments
       syncAssignments(missing).then(() => {
+        try { if (typeof window !== 'undefined') localStorage.setItem(storageKey, 'true'); } catch {}
         refetchCleaningAssignments();
       }).catch(() => {});
+    } else {
+      try { if (typeof window !== 'undefined') localStorage.setItem(storageKey, 'true'); } catch {}
     }
   }, [bookings, currentMonth, cleaningAssignments]);
 
@@ -931,6 +944,14 @@ export const BookingCalendar = () => {
       </Card>
     );
   }
+
+  const handleRefresh = useCallback(() => {
+    if ((handleRefresh as any)._lock) return;
+    (handleRefresh as any)._lock = true;
+    refetchBookings();
+    refetchCleaningAssignments();
+    setTimeout(() => { (handleRefresh as any)._lock = false; }, 1000);
+  }, [refetchBookings, refetchCleaningAssignments]);
 
   return (
     <div className="space-y-6">
@@ -983,13 +1004,8 @@ export const BookingCalendar = () => {
           <Send className="w-4 h-4 mr-2" />
           Send Schedules
         </Button>
-        <Button onClick={() => {
-          refetchBookings();
-          refetchCleaners();
-          refetchCleaningAssignments();
-        }} variant="outline" size="sm">
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Refresh
+        <Button onClick={handleRefresh} variant="outline" size="sm" disabled={loading}>
+          <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
         </Button>
         <Button onClick={goToToday} variant="outline" size="sm">
           Today
@@ -1008,11 +1024,7 @@ export const BookingCalendar = () => {
           <CardTitle className="flex items-center justify-between">
             <span>{monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()}</span>
             <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => {
-                  refetchBookings();
-                  refetchCleaners();
-                  refetchCleaningAssignments();
-                }} disabled={loading}>
+                <Button variant="outline" size="sm" onClick={handleRefresh} disabled={loading}>
                 <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
               </Button>
               <Button variant="outline" size="sm" onClick={goToPreviousMonth}>

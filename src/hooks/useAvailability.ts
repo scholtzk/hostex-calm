@@ -362,15 +362,38 @@ export const useAvailability = () => {
         return storage.links || [];
       }
 
-      // Read directly from Firestore
-      const colRef = query(collection(db, 'cleaner_availability_links'), orderBy('createdAt', 'desc'));
-      const snap = await getDocs(colRef);
-      const links = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() })) as CleanerAvailabilityLink[];
+      // Fetch first page via Cloud Function with pagination (no automatic month filter here)
+      const resp = await fetch('https://us-central1-property-manager-cf570.cloudfunctions.net/getAllAvailabilityLinks?limit=50', {
+        method: 'GET'
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      const links = (data.links || []) as CleanerAvailabilityLink[];
       setAvailabilityLinks(links);
       return links;
     } catch (err) {
       console.error('Error loading availability links:', err);
       setError(err instanceof Error ? err.message : 'Failed to load availability links');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getAvailabilityLinksPage = async (opts: { month?: string; cursor?: string; limit?: number } = {}) => {
+    try {
+      setLoading(true);
+      setError(null);
+      const params = new URLSearchParams();
+      if (opts.month) params.set('month', opts.month);
+      if (opts.cursor) params.set('cursor', opts.cursor);
+      params.set('limit', String(opts.limit ?? 50));
+      const url = `https://us-central1-property-manager-cf570.cloudfunctions.net/getAllAvailabilityLinks?${params.toString()}`;
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      return await resp.json(); // { links, nextCursor }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load availability links');
+      throw err;
     } finally {
       setLoading(false);
     }
@@ -386,6 +409,7 @@ export const useAvailability = () => {
     createAvailabilityLinks,
     getAvailabilityLink,
     getAllAvailabilityLinks,
+    getAvailabilityLinksPage,
     refetch: () => {
       if (availability) {
         getCleanerAvailability(availability.cleanerId, availability.month);

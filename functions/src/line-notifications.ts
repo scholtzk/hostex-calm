@@ -67,8 +67,25 @@ async function sendLineMessage(userId: string, message: LineMessage) {
   } catch (error) { console.error('Error sending LINE message:', error); throw error; }
 }
 
+// Fetch LINE user profile
+async function getLineUserProfile(userId: string): Promise<any | null> {
+  try {
+    const res = await fetch(`https://api.line.me/v2/bot/profile/${userId}`, {
+      headers: { 'Authorization': `Bearer ${LINE_CHANNEL_ACCESS_TOKEN}` }
+    });
+    if (!res.ok) {
+      console.warn('Failed to fetch LINE profile', res.status, await res.text());
+      return null;
+    }
+    return await res.json();
+  } catch (e) {
+    console.error('Error fetching LINE profile', e);
+    return null;
+  }
+}
+
 // Test function to verify LINE API integration
-export const testLineAPI = onRequest({ cors: true }, async (req, res) => {
+export const testLineAPI = onRequest({ cors: true, secrets: ["LINE_CHANNEL_ACCESS_TOKEN"], minInstances: 0 }, async (req, res) => {
   try {
     if (req.method !== 'POST') {
       res.status(405).send('Method Not Allowed');
@@ -164,7 +181,7 @@ function createMonthlyScheduleMessage(assignments: CleaningAssignment[], cleaner
 }
 
 // Send cleaning reminder to a specific cleaner
-export const sendCleaningReminder = onRequest({ cors: true }, async (req, res) => {
+export const sendCleaningReminder = onRequest({ cors: true, secrets: ["LINE_CHANNEL_ACCESS_TOKEN"], minInstances: 0 }, async (req, res) => {
   try {
     if (req.method !== 'POST') { res.status(405).send('Method Not Allowed'); return; }
 
@@ -199,7 +216,7 @@ export const sendCleaningReminder = onRequest({ cors: true }, async (req, res) =
 });
 
 // Send weekly schedule to a cleaner
-export const sendWeeklySchedule = onRequest({ cors: true }, async (req, res) => {
+export const sendWeeklySchedule = onRequest({ cors: true, secrets: ["LINE_CHANNEL_ACCESS_TOKEN"], minInstances: 0 }, async (req, res) => {
   try {
     if (req.method !== 'POST') { res.status(405).send('Method Not Allowed'); return; }
 
@@ -242,7 +259,7 @@ export const sendWeeklySchedule = onRequest({ cors: true }, async (req, res) => 
 });
 
 // Send monthly cleaning assignments to all cleaners
-export const sendMonthlyAssignments = onRequest({ cors: true }, async (req, res) => {
+export const sendMonthlyAssignments = onRequest({ cors: true, secrets: ["LINE_CHANNEL_ACCESS_TOKEN"], minInstances: 0 }, async (req, res) => {
   try {
     if (req.method !== 'POST') { res.status(405).send('Method Not Allowed'); return; }
 
@@ -305,12 +322,45 @@ export const sendMonthlyAssignments = onRequest({ cors: true }, async (req, res)
 });
 
 // Webhook to handle LINE bot responses
-export const lineWebhook = onRequest({ cors: true }, async (req, res) => {
+export const lineWebhook = onRequest({ cors: true, secrets: ["LINE_CHANNEL_ACCESS_TOKEN"], invoker: 'public', minInstances: 0 }, async (req, res) => {
   try {
     if (req.method !== 'POST') { res.status(405).send('Method Not Allowed'); return; }
 
     const { events } = req.body;
     for (const event of events) {
+      // Save LINE user ID when a user adds the bot
+      if (event.type === 'follow') {
+        const userId: string | undefined = event?.source?.userId;
+        if (userId) {
+          const profile = await getLineUserProfile(userId);
+          await db.collection('line-users').doc(userId).set({
+            userId,
+            isFollowing: true,
+            followedAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            profile: profile || null
+          }, { merge: true });
+
+          // Optional welcome
+          try {
+            await sendLineMessage(userId, { type: 'text', text: 'ご登録ありがとうございます！通知をお届けします。' });
+          } catch {}
+        }
+      }
+
+      // Mark as unfollowed when user removes the bot
+      if (event.type === 'unfollow') {
+        const userId: string | undefined = event?.source?.userId;
+        if (userId) {
+          await db.collection('line-users').doc(userId).set({
+            userId,
+            isFollowing: false,
+            unfollowedAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          }, { merge: true });
+        }
+      }
+
       if (event.type === 'postback') {
         const data = event.postback.data;
         const [action, assignmentId] = data.split(':');
@@ -344,7 +394,7 @@ async function getNextBookingGuests(booking: any): Promise<number | null> {
 }
 
 // Send availability link to cleaner
-export const sendAvailabilityLink = onRequest({ cors: true }, async (req, res) => {
+export const sendAvailabilityLink = onRequest({ cors: true, secrets: ["LINE_CHANNEL_ACCESS_TOKEN"], minInstances: 0 }, async (req, res) => {
   try {
     if (req.method !== 'POST') { res.status(405).send('Method Not Allowed'); return; }
 
@@ -373,7 +423,7 @@ export const sendAvailabilityLink = onRequest({ cors: true }, async (req, res) =
 }); 
 
 // Notify admins when a cleaner updates availability
-export const notifyAvailabilityUpdate = onRequest({ cors: true }, async (req, res) => {
+export const notifyAvailabilityUpdate = onRequest({ cors: true, secrets: ["LINE_CHANNEL_ACCESS_TOKEN"], minInstances: 0 }, async (req, res) => {
   try {
     if (req.method !== 'POST') { res.status(405).send('Method Not Allowed'); return; }
 

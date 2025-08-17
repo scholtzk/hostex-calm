@@ -5,9 +5,12 @@ export const useBookings = () => {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  let lastLoadAt: number | null = null;
 
   const loadBookings = async () => {
     try {
+      if (lastLoadAt && Date.now() - lastLoadAt < 5000) return;
+      lastLoadAt = Date.now();
       setLoading(true);
       console.log('Loading bookings from Firebase Cloud Function...');
       const response = await fetch('https://us-central1-property-manager-cf570.cloudfunctions.net/bookings?limit=100');
@@ -65,14 +68,6 @@ export const useBookings = () => {
 
   useEffect(() => {
     loadBookings();
-    
-    // Auto-refresh every 5 minutes
-    const interval = setInterval(() => {
-      console.log('Auto-refreshing bookings...');
-      loadBookings();
-    }, 5 * 60 * 1000); // 5 minutes
-    
-    return () => clearInterval(interval);
   }, []);
 
   return { bookings, loading, error, refetch: loadBookings };

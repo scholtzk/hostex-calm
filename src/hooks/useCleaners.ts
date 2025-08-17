@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Cleaner, CleaningAssignment, CleaningTask } from '@/types/booking';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, query, where, limit as fbLimit } from 'firebase/firestore';
@@ -10,6 +10,52 @@ export const useCleaners = () => {
   const [availabilityMap, setAvailabilityMap] = useState<Record<string, { month: string; dates: string[] }>>({}); // cleanerId -> {month, dates}
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const prefetchedMonthsRef = useRef<Set<string>>(new Set());
+  const prefetchInFlightRef = useRef<Set<string>>(new Set());
+
+  const getMonthRange = (date: Date) => {
+    const start = new Date(date.getFullYear(), date.getMonth(), 1);
+    const end = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+    const startStr = start.toISOString().split('T')[0];
+    const endStr = end.toISOString().split('T')[0];
+    return { startStr, endStr };
+  };
+
+  const getRangeForMonthString = (month: string) => {
+    const [y, m] = month.split('-').map((v) => parseInt(v, 10));
+    const start = new Date(y, m - 1, 1);
+    const end = new Date(y, m, 0);
+    return { startStr: start.toISOString().split('T')[0], endStr: end.toISOString().split('T')[0] };
+  };
+
+  const prefetchAvailabilityForMonth = async (month: string) => {
+    if (prefetchedMonthsRef.current.has(month) || prefetchInFlightRef.current.has(month)) return;
+    prefetchInFlightRef.current.add(month);
+    try {
+      const qAll = query(collection(db, 'cleaner_availability'), where('month', '==', month));
+      const snap = await getDocs(qAll);
+      const updates: Record<string, { month: string; dates: string[] }> = {};
+      snap.forEach((d) => {
+        const data: any = d.data();
+        updates[data.cleanerId] = { month, dates: data.availableDates || [] };
+      });
+      // Ensure we also set empty arrays for active cleaners without a doc to avoid future reads
+      cleaners
+        .filter((c) => c.isActive)
+        .forEach((c) => {
+          if (!updates[c.id]) updates[c.id] = { month, dates: [] };
+        });
+      if (Object.keys(updates).length > 0) {
+        setAvailabilityMap((prev) => ({ ...prev, ...updates }));
+      }
+      prefetchedMonthsRef.current.add(month);
+    } catch (e) {
+      console.warn('Prefetch availability failed for', month, e);
+    } finally {
+      prefetchInFlightRef.current.delete(month);
+    }
+  };
 
   const loadCleaners = async () => {
     try {
@@ -34,7 +80,8 @@ export const useCleaners = () => {
 
   const loadAssignments = async () => {
     try {
-      const response = await fetch('https://us-central1-property-manager-cf570.cloudfunctions.net/getCleaningAssignments');
+      const { startStr, endStr } = getMonthRange(new Date());
+      const response = await fetch(`https://us-central1-property-manager-cf570.cloudfunctions.net/getCleaningAssignments?startDate=${startStr}&endDate=${endStr}`);
       
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -139,18 +186,15 @@ export const useCleaners = () => {
       const result = await response.json();
       console.log('Assignment successful:', result);
       
-      // The response only contains a message, so we need to refresh from Firestore
-      // to get the updated assignment data
-      await loadAssignments();
-      
-      // Since loadAssignments updates the state asynchronously, we need to wait a bit
-      // or fetch the data directly to get the updated assignment
-      const refreshResponse = await fetch('https://us-central1-property-manager-cf570.cloudfunctions.net/getCleaningAssignments');
+      // Refresh for the month of the assignment
+      const month = assignment.date.slice(0, 7);
+      const { startStr, endStr } = getRangeForMonthString(month);
+      const refreshResponse = await fetch(`https://us-central1-property-manager-cf570.cloudfunctions.net/getCleaningAssignments?startDate=${startStr}&endDate=${endStr}`);
       const refreshData = await refreshResponse.json();
-      const assignments = refreshData.assignments || [];
+      const assignmentsArr = refreshData.assignments || [];
       
       // Find the updated assignment from the refreshed data
-      const updatedAssignment = assignments.find((a: any) => a.currentCleaningDate === assignment.date && a.bookingId === assignment.bookingId);
+      const updatedAssignment = assignmentsArr.find((a: any) => a.currentCleaningDate === assignment.date && a.bookingId === assignment.bookingId);
       
       if (!updatedAssignment) {
         throw new Error('Assignment not found after update');
@@ -166,6 +210,12 @@ export const useCleaners = () => {
         assignedAt: updatedAssignment.updatedAt,
         completedAt: null
       };
+      
+      // Update local list optimistically
+      setAssignments((prev) => {
+        const others = prev.filter((a) => !(a.date === convertedAssignment.date && a.bookingId === convertedAssignment.bookingId));
+        return [...others, convertedAssignment];
+      });
       
       return convertedAssignment;
     } catch (err) {
@@ -270,40 +320,8 @@ export const useCleaners = () => {
     const dateStr = date; // expected "YYYY-MM-DD"
     const month = dateStr.slice(0, 7); // YYYY-MM
 
-    // Async load availability for cleaners where missing
-    const missingCleanerIds = cleaners
-      .filter(c => c.isActive)
-      .filter(c => !(availabilityMap[c.id] && availabilityMap[c.id].month === month))
-      .map(c => c.id);
-
-    if (missingCleanerIds.length > 0) {
-      // fire and forget loading
-      (async () => {
-        const updates: Record<string, { month: string; dates: string[] }> = {};
-        for (const cleanerId of missingCleanerIds) {
-          try {
-            const q = query(
-              collection(db, 'cleaner_availability'),
-              where('cleanerId', '==', cleanerId),
-              where('month', '==', month),
-              fbLimit(1)
-            );
-            const snap = await getDocs(q);
-            let dates: string[] = [];
-            if (!snap.empty) {
-              const data = snap.docs[0].data();
-              dates = data.availableDates || [];
-            }
-            updates[cleanerId] = { month, dates };
-          } catch (err) {
-            console.error('Error loading availability for cleaner', cleanerId, err);
-          }
-        }
-        if (Object.keys(updates).length > 0) {
-          setAvailabilityMap(prev => ({ ...prev, ...updates }));
-        }
-      })();
-    }
+    // Prefetch availability once per month instead of per cleaner
+    prefetchAvailabilityForMonth(month).catch(() => {});
 
     return cleaners.filter(
       cleaner =>
@@ -331,7 +349,6 @@ export const useCleaners = () => {
 
   useEffect(() => {
     loadCleaners();
-    loadAssignments();
   }, []);
 
   // Clear old assignments after loading
@@ -356,7 +373,6 @@ export const useCleaners = () => {
     clearOldAssignments,
     refetch: () => {
       loadCleaners();
-      loadAssignments();
       loadTasks();
     }
   };
