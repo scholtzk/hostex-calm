@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { CleanerAvailability, CleanerAvailabilityLink } from '@/types/booking';
-import { collection, getDocs, query, orderBy, where, limit as fbLimit, addDoc, serverTimestamp, updateDoc, doc } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, where, limit as fbLimit, addDoc, serverTimestamp, updateDoc, doc, startAfter, getDoc } from 'firebase/firestore';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '@/lib/firebase';
 
@@ -362,13 +362,9 @@ export const useAvailability = () => {
         return storage.links || [];
       }
 
-      // Fetch first page via Cloud Function with pagination (no automatic month filter here)
-      const resp = await fetch('https://us-central1-property-manager-cf570.cloudfunctions.net/getAllAvailabilityLinks?limit=50', {
-        method: 'GET'
-      });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const data = await resp.json();
-      const links = (data.links || []) as CleanerAvailabilityLink[];
+      const colRef = query(collection(db, 'cleaner_availability_links'), orderBy('createdAt', 'desc'), fbLimit(50));
+      const snap = await getDocs(colRef);
+      const links = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as any;
       setAvailabilityLinks(links);
       return links;
     } catch (err) {
@@ -383,14 +379,20 @@ export const useAvailability = () => {
     try {
       setLoading(true);
       setError(null);
-      const params = new URLSearchParams();
-      if (opts.month) params.set('month', opts.month);
-      if (opts.cursor) params.set('cursor', opts.cursor);
-      params.set('limit', String(opts.limit ?? 50));
-      const url = `https://us-central1-property-manager-cf570.cloudfunctions.net/getAllAvailabilityLinks?${params.toString()}`;
-      const resp = await fetch(url);
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      return await resp.json(); // { links, nextCursor }
+      let qref: any = query(collection(db, 'cleaner_availability_links'));
+      if (opts.month) qref = query(qref, where('month', '==', opts.month));
+      qref = query(qref, orderBy('createdAt', 'desc'), fbLimit(opts.limit ?? 50));
+      if (opts.cursor) {
+        const cursorDoc = await getDoc(doc(db, 'cleaner_availability_links', opts.cursor));
+        if (cursorDoc.exists()) {
+          qref = query(qref, startAfter(cursorDoc));
+        }
+      }
+      const snap = await getDocs(qref);
+      const links = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as CleanerAvailabilityLink[];
+      const nextCursor = snap.docs.length ? snap.docs[snap.docs.length - 1].id : null;
+      setAvailabilityLinks((prev) => ([...prev, ...links]));
+      return { links, nextCursor };
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load availability links');
       throw err;
