@@ -47,10 +47,12 @@ export const useCleaningAssignments = (): UseCleaningAssignmentsReturn => {
       setError(null);
       
       const { startStr, endStr } = getMonthRange(new Date());
-      const response = await fetch(`https://us-central1-property-manager-cf570.cloudfunctions.net/getCleaningAssignments?startDate=${startStr}&endDate=${endStr}`);
+      const url = `https://us-central1-property-manager-cf570.cloudfunctions.net/getCleaningAssignments?startDate=${startStr}&endDate=${endStr}`;
+      const response = await fetch(url);
       
       if (!response.ok) {
-        throw new Error('Failed to fetch cleaning assignments');
+        const hdr = response.headers.get('x-error') || '';
+        throw new Error(`HTTP ${response.status}: ${hdr}`);
       }
       
       const data = await response.json();

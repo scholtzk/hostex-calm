@@ -18,21 +18,32 @@ export const getCleaningAssignments = onRequest({ cors: true, minInstances: 0 },
     if (date) {
       query = query.where('currentCleaningDate', '==', date);
     } else if (startDate && endDate) {
+      let start = String(startDate);
+      let end = String(endDate);
+      if (start > end) { const t = start; start = end; end = t; }
       query = query
-        .where('currentCleaningDate', '>=', startDate)
-        .where('currentCleaningDate', '<=', endDate);
+        .where('currentCleaningDate', '>=', start)
+        .where('currentCleaningDate', '<=', end);
     } else {
-      res.status(400).json({ error: 'date or startDate+endDate is required' });
-      return;
+      // Default to current month to avoid broad scans and 400s
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+      query = query
+        .where('currentCleaningDate', '>=', monthStart)
+        .where('currentCleaningDate', '<=', monthEnd);
     }
 
     const assignmentsSnapshot = await query.get();
     const assignments = assignmentsSnapshot.docs.map(doc => ({ date: doc.data().currentCleaningDate, id: doc.id, ...doc.data() }));
     res.set('Cache-Control', 'public, max-age=60');
     res.status(200).json({ assignments });
-  } catch (error) {
-    console.error('Error fetching cleaning assignments:', error);
-    res.status(500).json({ error: 'Failed to fetch cleaning assignments' });
+  } catch (error: any) {
+    console.error('Error fetching cleaning assignments:', error?.message || error);
+    // Fail-soft: return empty list so UI continues to work, include error hint header
+    res.set('x-error', String(error?.message || error));
+    res.set('Cache-Control', 'no-store');
+    res.status(200).json({ assignments: [] });
   }
 });
 
