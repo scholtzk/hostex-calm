@@ -60,15 +60,11 @@ export const useCleaners = () => {
   const loadCleaners = async () => {
     try {
       setLoading(true);
-      const response = await fetch('https://us-central1-property-manager-cf570.cloudfunctions.net/getCleaners');
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      
-      const data = await response.json();
-      const nonAdmins = (data.cleaners || []).filter((c: any) => (c.role || 'cleaner') !== 'admin');
-      setCleaners(nonAdmins);
+      const snap = await getDocs(query(collection(db, 'cleaners'), where('isActive', '==', true)));
+      const list = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+      const nonAdmins = list.filter((c: any) => (c.role || 'cleaner') !== 'admin');
+      nonAdmins.sort((a: any, b: any) => (a.name || '').localeCompare(b.name || ''));
+      setCleaners(nonAdmins as any);
       setError(null);
     } catch (err) {
       console.error('Error loading cleaners:', err);
@@ -81,20 +77,16 @@ export const useCleaners = () => {
   const loadAssignments = async () => {
     try {
       const { startStr, endStr } = getMonthRange(new Date());
-      const response = await fetch(`https://us-central1-property-manager-cf570.cloudfunctions.net/getCleaningAssignments?startDate=${startStr}&endDate=${endStr}`);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      
-      const data = await response.json();
-      
-      // Handle the new cleaning assignments structure
-      const assignments = data.assignments || [];
-      
-      // Convert the new structure to the old structure for backward compatibility
-      const convertedAssignments = assignments.map((assignment: any) => ({
-        id: assignment.date, // Use date as ID
+      const snap = await getDocs(
+        query(
+          collection(db, 'cleaning-assignments'),
+          where('currentCleaningDate', '>=', startStr),
+          where('currentCleaningDate', '<=', endStr)
+        )
+      );
+      const raw = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+      const converted = raw.map((assignment: any) => ({
+        id: assignment.id || assignment.date,
         date: assignment.currentCleaningDate,
         bookingId: assignment.bookingId,
         cleanerId: assignment.cleanerId,
@@ -102,8 +94,7 @@ export const useCleaners = () => {
         assignedAt: assignment.updatedAt,
         completedAt: null
       }));
-      
-      setAssignments(convertedAssignments);
+      setAssignments(converted as any);
     } catch (err) {
       console.error('Error loading assignments:', err);
       setAssignments([]);

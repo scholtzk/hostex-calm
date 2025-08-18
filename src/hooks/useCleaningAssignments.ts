@@ -66,18 +66,22 @@ export const useCleaningAssignments = (): UseCleaningAssignmentsReturn => {
 
   const createOrUpdateAssignment = async (assignment: Partial<CleaningAssignment>) => {
     try {
-      const response = await fetch('https://us-central1-property-manager-cf570.cloudfunctions.net/createOrUpdateCleaningAssignment', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(assignment),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to create/update cleaning assignment');
-      }
-
+      // Direct write to Firestore
+      const docId = `${assignment.originalBookingDate}_${assignment.bookingId}`;
+      const payload: any = {
+        originalBookingDate: assignment.originalBookingDate,
+        currentCleaningDate: assignment.currentCleaningDate,
+        bookingId: assignment.bookingId,
+        guestName: assignment.guestName,
+        cleanerId: assignment.cleanerId ?? null,
+        cleanerName: assignment.cleanerName ?? null,
+        bookingDateChanged: assignment.bookingDateChanged ?? false,
+        updatedAt: new Date().toISOString(),
+      };
+      const { doc, setDoc } = await import('firebase/firestore');
+      const { db } = await import('@/lib/firebase');
+      await setDoc(doc(db as any, 'cleaning-assignments', docId as string), payload, { merge: true } as any);
+ 
       // Refetch to get updated data
       await fetchAssignments();
     } catch (err) {
@@ -87,18 +91,15 @@ export const useCleaningAssignments = (): UseCleaningAssignmentsReturn => {
 
   const updateCleanerAssignment = async (date: string, cleanerId: string | null, cleanerName: string | null) => {
     try {
-      const response = await fetch(`https://us-central1-property-manager-cf570.cloudfunctions.net/updateCleanerAssignment/${date}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ cleanerId, cleanerName }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to update cleaner assignment');
+      // Direct update by querying by date then updating
+      const { query: q, collection: col, where, getDocs, doc, updateDoc } = await import('firebase/firestore');
+      const { db } = await import('@/lib/firebase');
+      const snap = await getDocs(q(col(db as any, 'cleaning-assignments'), where('currentCleaningDate', '==', date)) as any);
+      const target = snap.docs[0];
+      if (target) {
+        await updateDoc(doc(db as any, 'cleaning-assignments', target.id), { cleanerId, cleanerName, updatedAt: new Date().toISOString() } as any);
       }
-
+ 
       // Refetch to get updated data
       await fetchAssignments();
     } catch (err) {
@@ -108,14 +109,12 @@ export const useCleaningAssignments = (): UseCleaningAssignmentsReturn => {
 
   const deleteAssignment = async (date: string) => {
     try {
-      const response = await fetch(`https://deletecleaningassignment-463sryhoiq-uc.a.run.app/${date}`, {
-        method: 'DELETE',
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to delete cleaning assignment');
-      }
-
+      const { query: q, collection: col, where, getDocs, doc, deleteDoc } = await import('firebase/firestore');
+      const { db } = await import('@/lib/firebase');
+      const snap = await getDocs(q(col(db as any, 'cleaning-assignments'), where('currentCleaningDate', '==', date)) as any);
+      const target = snap.docs[0];
+      if (target) await deleteDoc(doc(db as any, 'cleaning-assignments', target.id));
+ 
       // Refetch to get updated data
       await fetchAssignments();
     } catch (err) {
@@ -125,18 +124,27 @@ export const useCleaningAssignments = (): UseCleaningAssignmentsReturn => {
 
   const syncAssignments = async (bookings: any[]) => {
     try {
-      const response = await fetch('https://us-central1-property-manager-cf570.cloudfunctions.net/syncCleaningAssignments', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ bookings }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to sync cleaning assignments');
+      // Client-side: create missing docs directly
+      const { doc, getDoc, setDoc } = await import('firebase/firestore');
+      const { db } = await import('@/lib/firebase');
+      for (const b of bookings) {
+        const id = `${b.checkOut}_${b.id}`;
+        const ref = doc(db as any, 'cleaning-assignments', id);
+        const snap = await getDoc(ref);
+        if (!snap.exists()) {
+          await setDoc(ref, {
+            originalBookingDate: b.checkOut,
+            currentCleaningDate: b.checkOut,
+            bookingId: b.id,
+            guestName: b.guestName,
+            cleanerId: null,
+            cleanerName: null,
+            bookingDateChanged: false,
+            updatedAt: new Date().toISOString(),
+          } as any);
+        }
       }
-
+ 
       // Refetch to get updated data
       await fetchAssignments();
     } catch (err) {
